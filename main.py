@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
+from routes import getdataroute
 import uvicorn
 
 
@@ -15,7 +16,7 @@ def home():
 
 
 def configure_routing():
-    pass
+    app.include_router(getdataroute.router)
 
 
 if __name__ == '__main__':
