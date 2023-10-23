@@ -2,8 +2,9 @@ from fastapi import Request, Response
 import json
 from fastapi_utils.inferring_router import InferringRouter
 import os
-from models.samplemodel import SampleModel
+from models.samplemodel import SampleModel, searchModel
 from service.dataservice import DataService
+from common.Response import *
 
 
 
@@ -11,15 +12,15 @@ router = InferringRouter(prefix="/data")
 
 
 class CityRouter:
-    @router.post("/insert",tags=["raw/data"])
-    async def get(request:Request):
+    @router.post("/get",tags=["raw/data"])
+    async def get(request:Request, searchModel:searchModel):
             try:
-                return Response.data(DataService.get())
+                return Response.data(DataService.get(searchModel))
             except Exception as ex:
                 return Response.error(ex)
             
     @router.post("/insertsample",tags=["raw/data"])
-    async def getsample(request:Request,SampleModel:SampleModel):
+    async def insertsample(request:Request,SampleModel:SampleModel):
             try:
                 return Response.data(DataService.insert(SampleModel))
             except Exception as ex:
