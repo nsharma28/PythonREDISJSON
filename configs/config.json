@@ -1,0 +1,45 @@
+{
+    "applicationName": "OSM API",
+    "ignoreToken": false,
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7MPdMsL9++tA55zx2H2cgt6wvsOwEYVVmiwFwLRx++SEhv75L4bGRbj6VlnFnYuFKleqevWW7LjLuH6tuhcENnsucErfkExaN2kru2bZK3U9WQn02RtU8ha5RNoxgNyxr9v0PASqiyIVWl8s6du8Rzmt9XewLl3q+Kaw6t/oB/TTmpwY/ma4WYfBjTQwgBmNJ7apO5mXsT3YiZ0cZYYAs+pqsAiW+biwfH3S3QNoCt3kxsxE30jbrCc1v5IRanXoj+s/bRANoi8czbu9oCWmCgZKUlClHYbD7d7P7O8Oqdf4hjNBneg+XFEp3WgXHY6cNLmNGnLalWZ81dHEA1QKNQIDAQAB\n-----END PUBLIC KEY-----",
+    "algorithm": "RS256",
+    "connections": {
+      "loginUserRedis": {
+        "connectionString": "redis://:FAwnYRe@redis.db.svc:16379/16",
+        "provider": "redis"
+      },
+      "errorLog": {
+        "connectionString": "localhost://postgres:admin@isgpostgres:5432",
+        "provider": "postgresql"
+      },
+      "default": {
+        "connectionString": "localhost://postgres:admin@isgpostgres:5432",
+        "provider": "postgresql"
+      }
+    },
+    "log": {
+      "enableWriteInfo": true,
+      "enableWriteError": true,
+      "enableInsertError": true,
+      "errorConnectionStringKey": "errorLog",
+      "logPath": "/master_api/logs/exception.log",
+      "loggerName": "exceptionlooger",
+      "logFormat": "%(asctime)s, %(levelname)s [%(filename)s:%(lineno)d in function %(funcName)s] %(message)s",
+      "logFilehandlertime": "H",
+      "logInterval": 1,
+      "backupCount": 0
+    },
+    "email":{
+      "enableEmail": true,
+      "to" : "nsharma@infosenseglobal.com",
+      "cc":"nsharma@infosenseglobal.com",
+      "bcc":"",
+      "url":"http://emailapi-service.webapi.svc:80/sendexception"
+    },
+    "appsettings":{
+      "application":{
+        "servername":"Local" ,
+        "copyright":"Copyright © 2023 TRANSCOM"
+      }
+    }
+  }
