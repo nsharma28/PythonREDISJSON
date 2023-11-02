@@ -1,1 +1,10 @@
-sample file
+{
+mls_number
+}
+
+
+
+{
+city,
+state
+}sample file
