@@ -9,6 +9,7 @@ from service.filestatus import *
 from service.datarestructure import *
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
+from service.mappingfilepath import *
 
 
 
@@ -40,7 +41,8 @@ class DataService:
         else:
             last_processed_file_timestamp = last_processed_file_timestamp[0]['file_timestamp']
         
-        mapping_file = config_dict['data'][mymlsType.mls_name]['mappingfile']+'\\'+mymlsType.mls_name+'_small.properties'
+        
+        mapping_file_instance = MappingFilePath(mymlsType.mls_name)
         DataService.data_folder = config_dict['data'][mymlsType.mls_name]['datapath']
         
         new_file_list = []
@@ -59,13 +61,16 @@ class DataService:
         print("File List for Processing ::",new_file_list)
         
         mappinginstance = Mapping(DataService.data_folder)
-        DataService.field_mapping_flags = mappinginstance.prepare_mapping_object(mapping_file)
+        mappinginstance.prepare_mapping_object(mapping_file_instance.property_file_path,'property')
+        mappinginstance.prepare_mapping_object(mapping_file_instance.feature_file_path,'feature')
+        mappinginstance.prepare_mapping_object(mapping_file_instance.media_file_path,'media')
+        mappinginstance.prepare_mapping_object(mapping_file_instance.user_file_path,'user')
         
-        batch_docs = [new_file_list[index : index+2] for index in range(0,len(new_file_list),2)]
-        time_docs = [new_file_list_timestamp[index : index+2] for index in range(0,len(new_file_list_timestamp),2)]
+        batch_docs = [new_file_list[index : index+10] for index in range(0,len(new_file_list),10)]
+        time_docs = [new_file_list_timestamp[index : index+10] for index in range(0,len(new_file_list_timestamp),10)]
         thread_count = [i + 1 for i in range(len(batch_docs))]
         
-        with ThreadPoolExecutor(3) as executor:
+        with ThreadPoolExecutor(1) as executor:
            #print('batch_docs::::',batch_docs)
            #print('time_docs::::',time_docs)
            result =  executor.map(DataService.processandinsert,batch_docs,(mymlsType.mls_name,)* len(batch_docs),time_docs,thread_count)
@@ -88,7 +93,7 @@ class DataService:
         #print('new_file_list::::',new_file_list)
         sql = Sql('default')
         mappinginstance = Mapping(DataService.data_folder)
-        data_to_insert = mappinginstance.restructure_data(DataService.data_folder,new_file_list,mls_name,DataService.field_mapping_flags)
+        data_to_insert = mappinginstance.restructure_data(DataService.data_folder,new_file_list)
         property_data = list(data_to_insert['PROPERTY_SECTION'].values())
         feature_data = list(data_to_insert['FEATURES_SECTION'].values())
         media_data = list(data_to_insert['MEDIA_SECTION'].values())
