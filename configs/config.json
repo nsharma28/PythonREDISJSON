@@ -41,5 +41,11 @@
         "servername":"Local" ,
         "copyright":"Copyright © 2023 TRANSCOM"
       }
+    },
+    "data":{
+      "recolorado":{
+        "mappingfile":"C:\\Users\\NehaSharma\\OneDrive - Infosense Pvt Ltd\\neha\\typescript\\python-osm-project\\configs\\mapping",
+        "datapath":"C:\\Users\\NehaSharma\\OneDrive - Infosense Pvt Ltd\\neha\\typescript\\python-osm-project\\data"
+      }
     }
   }
