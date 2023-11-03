@@ -21,6 +21,6 @@ def configure_routing():
 
 if __name__ == '__main__':
     configure_routing()
-    uvicorn.run("main:app", host="127.0.0.1", port=5000, loop='asyncio', workers=2, log_level="info")
+    uvicorn.run("main:app", host="127.0.0.1", port=5000, loop='asyncio', workers=2, log_level="info", reload=True)
 else:
     configure_routing()
