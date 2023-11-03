@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel
 from fastapi_camelcase import CamelModel
 
@@ -8,3 +9,14 @@ class SampleModel(CamelModel,BaseModel):
     
 class searchModel(CamelModel,BaseModel):
     property_id:str = ''
+    
+class mlsType(CamelModel,BaseModel):
+    mls_name:str = ''
+    
+class lastReadFile(CamelModel,BaseModel):
+    mls_name:str = ''
+    file_name:str = ''
+    file_timestamp:str = ''
+    
+class deleteModel(CamelModel,BaseModel):
+    bfcid_array:List[str]
