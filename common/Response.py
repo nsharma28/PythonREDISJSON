@@ -1,6 +1,6 @@
 from fastapi import status
 import traceback
-from isg_common.Log import *
+from common.logs.log import Log
 
 class Response():
 
