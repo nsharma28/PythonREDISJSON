@@ -49,5 +49,12 @@ class MyConvert:
         except Exception:
             return {}
 
+    def alphabetic_to_number(char):
+        if 'A' <= char <= 'Z':
+            return ord(char) - ord('A') + 1
+        elif 'a' <= char <= 'z':
+            return ord(char) - ord('a') + 1
+        else:
+            return char  # Return the character itself for non-alphabetic characters
         
 
