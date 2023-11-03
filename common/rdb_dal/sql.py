@@ -20,8 +20,22 @@ class Sql():
 
         self.__instance = __class(connection_string)
         
+    def open_connection(self):
+        return self.__instance.open_connection()
+    
+    def start_transaction(self,connection_obj):
+        self.__instance.start_transaction(connection_obj)
+        
+    def close_connection(self,connection_obj):
+        self.__instance.close_connection(connection_obj)
+    
+    def commit_transaction(self,connection_obj):
+        self.__instance.commit_transaction(connection_obj)
+    
+    def rollback_transaction(self,connection_obj):
+        self.__instance.rollback_transaction(connection_obj)
 
-    def execute(self,query,param_dict =None):
+    def execute(self,connection_obj,query,param_dict =None):
         """ Execute DML Commands  
             Query      ->   INSERT INTO TABLE_NAME (column_1,column_2...[n]) 
                             VALUES (%(key_name_1)s, %(key_name_2)s)
@@ -38,7 +52,28 @@ class Sql():
         if param_dict != None and self.__provider in ['trino'] and isinstance(param_dict,dict):
             query,param_dict = self.create_sql_query_param_for_trino(query,param_dict)
 
-        return  self.__instance.execute(query,param_dict)
+        return  self.__instance.execute(connection_obj,query,param_dict)
+    
+    def execute_batch(self,connection_obj,query,param_dict =None):
+        """ Execute DML Commands in batch for faster insert 
+            Query      ->   INSERT INTO TABLE_NAME (column_1,column_2...[n]) 
+                            VALUES (%(key_name_1)s, %(key_name_2)s)
+            param_dict - >  {"key_name_1": value ,"key_name_1": value }
+                
+        Args:
+            query (String)          : Sql query to execute
+            param_dict (Dictonery)  : If Query do have parameters then it contain the key and its associate value.Defaults to None
+
+        Returns:
+            [int]: Return 0 if successfully executed the query
+        """
+
+        if param_dict != None and self.__provider in ['trino'] and isinstance(param_dict,dict):
+            query,param_dict = self.create_sql_query_param_for_trino(query,param_dict)
+            
+        #connection_obj = self.__instance.open_connection()
+
+        return  self.__instance.execute_batch(connection_obj,query,param_dict)
 
     def execute_value(self,query,param_dict = None):
         """ Execute a SQL Command and  returns a single row of data from the database.
