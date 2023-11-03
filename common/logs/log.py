@@ -81,7 +81,9 @@ class Log:
             self.insert_data(errorId, exception)
         return errorId
     def insert_data(self, errorId, exception):
-        sql_query = "insert into osm_master.dfe_error_reports(id,name,description,email,error,app_name,user_id,report_datetime) values(%(errorid)s,%(name)s,%(description)s,%(email)s,%(error)s,%(app_name)s,%(user_id)s,%(reportdatetime)s)"
+        print("sql error id::",errorId)
+        print("sql exception id::",exception)
+        sql_query = "insert into dbt_source.error_reports(id,name,description,email,error,app_name,user_id,report_datetime) values(%(errorid)s,%(name)s,%(description)s,%(email)s,%(error)s,%(app_name)s,%(user_id)s,%(reportdatetime)s)"
         param_dict={
                 "errorid":errorId,
                 "name":"",
@@ -91,7 +93,7 @@ class Log:
                 "app_name":"",
                 "user_id":0,
                 "reportdatetime":datetime.utcnow()}
-        self.sql_instance.execute(sql_query,param_dict)
+        #self.sql_instance.execute(sql_query,param_dict)
         print("inserted exception in table successfully")
     @dispatch(str)
     async def write_async(self, message):
