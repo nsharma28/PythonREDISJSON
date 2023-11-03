@@ -4,6 +4,7 @@ from common.rdb_dal.exception.common_exceptions import OpenConnectionError
 
 # Library Import
 import psycopg2
+from psycopg2 import extras
 from urllib.parse import urlparse
 
 class PostgresSql(SqlUtility):
@@ -39,7 +40,17 @@ class PostgresSql(SqlUtility):
         """
         return psycopg2.connect(database = self.database, user = self.user , password = self.password, host = self.host, port = self.port) #getting postgres connection
 
-    
+    def execute_batch_insert(self,connection_obj,query, data_model):
+        """ Execute batch insert
+
+        Raises:
+            OpenConnectionError: Raise when connection is not established or giving error due to any reasons
+
+        Returns:
+            [Object]: sources connection object
+        """
+        return extras.execute_batch(connection_obj.cursor(),query,data_model)
+        
 
     
             
