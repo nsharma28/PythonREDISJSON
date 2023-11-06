@@ -10,6 +10,8 @@ from service.datarestructure import *
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from service.mappingfilepath import *
+from service.mappingfilepath import MappingFilePath
+from common.logs.log import *
 
 
 
@@ -42,8 +44,11 @@ class DataService:
             last_processed_file_timestamp = last_processed_file_timestamp[0]['file_timestamp']
         
         
-        mapping_file_instance = MappingFilePath(mymlsType.mls_name)
         DataService.data_folder = config_dict['data'][mymlsType.mls_name]['datapath']
+        
+        # Find correct path of each property file and calling function to create mapping object
+        mapping_file_instance = MappingFilePath(mymlsType.mls_name)
+        mapping_file_instance.createMappingObject()
         
         new_file_list = []
         new_file_list_timestamp = []
@@ -60,24 +65,24 @@ class DataService:
         #new_file_list = file_list
         print("File List for Processing ::",new_file_list)
         
-        mappinginstance = Mapping(DataService.data_folder)
-        mappinginstance.prepare_mapping_object(mapping_file_instance.property_file_path,'property')
-        mappinginstance.prepare_mapping_object(mapping_file_instance.feature_file_path,'feature')
-        mappinginstance.prepare_mapping_object(mapping_file_instance.media_file_path,'media')
-        mappinginstance.prepare_mapping_object(mapping_file_instance.user_file_path,'user')
-        
-        batch_docs = [new_file_list[index : index+10] for index in range(0,len(new_file_list),10)]
-        time_docs = [new_file_list_timestamp[index : index+10] for index in range(0,len(new_file_list_timestamp),10)]
+        batch_docs = [new_file_list[index : index+2] for index in range(0,len(new_file_list),2)]
+        time_docs = [new_file_list_timestamp[index : index+2] for index in range(0,len(new_file_list_timestamp),2)]
         thread_count = [i + 1 for i in range(len(batch_docs))]
+        processed_count = 0
         
-        with ThreadPoolExecutor(1) as executor:
+        with ThreadPoolExecutor(3) as executor:
            #print('batch_docs::::',batch_docs)
            #print('time_docs::::',time_docs)
-           result =  executor.map(DataService.processandinsert,batch_docs,(mymlsType.mls_name,)* len(batch_docs),time_docs,thread_count)
-        
+           result =  list(executor.map(DataService.processandinsert,batch_docs,(mymlsType.mls_name,)* len(batch_docs),time_docs,thread_count))
+           print(result)
+           processed_count = processed_count + result[0]
         
         process_end_time = time.time()
+        log = Log()
         print(f"Total DB Insertion Took : {process_end_time - process_start_time} seconds")
+        log.write(f"Total DB Insertion Took : {process_end_time - process_start_time} seconds")
+        log.write(f"Total Records Processed : {processed_count}")
+        
         # data_to_insert = mappinginstance.restructure_data(new_file_list,mymlsType.mls_name)
         # property_data = list(data_to_insert['PROPERTY_SECTION'].values())
         # feature_data = list(data_to_insert['FEATURES_SECTION'].values())
@@ -98,6 +103,7 @@ class DataService:
         feature_data = list(data_to_insert['FEATURES_SECTION'].values())
         media_data = list(data_to_insert['MEDIA_SECTION'].values())
         user_data = list(data_to_insert['USER_SECTION'].values())
+        openhouse_data = list(data_to_insert['OPENHOUSE_SECTION'].values())
         bfcid_array = (list(data_to_insert['PROPERTY_SECTION'].keys()),)
         
         
@@ -119,6 +125,9 @@ class DataService:
             # Inserting into user table
             sql.execute_batch(connecton_obj,sql_query.user_insert_query, user_data)
             
+            # Inserting into openhouse table
+            sql.execute_batch(connecton_obj,sql_query.openhouse_insert_query, openhouse_data)
+            
             if len(time_docs) > 0:
                 sorted_timestamps = sorted(time_docs, reverse=True)
                 latest_timestamp = sorted_timestamps[0]
@@ -137,7 +146,7 @@ class DataService:
             print(f"Error: {e}")
         finally:
             sql.close_connection(connecton_obj)
-            
-        return 1
+        
+        return len(bfcid_array[0])
             
         
