@@ -219,3 +219,19 @@ TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS dbt_source.user_ptnf
     OWNER to postgres;
+
+
+drop table if exists dbt_source.openhouse_ptnf;
+CREATE TABLE dbt_source.openhouse_ptnf (
+   id bigserial NOT NULL PRIMARY KEY,
+   bfcid bigint NOT NULL,
+   mls_number character varying(45),
+  OPEN_DATE timestamp without time zone DEFAULT NULL,
+  OPEN_ST_TIME time DEFAULT NULL,
+  OPEN_END_TIME time DEFAULT NULL,
+  COMMENTS text DEFAULT NULL,
+  OPENHOUSE_TYPE character varying(30) DEFAULT NULL,
+  OPENHOUSE_STATUS character varying(30) DEFAULT NULL,
+  OPEN_MODIF_TSTAMP timestamp without time zone DEFAULT NULL,
+  OPENHOUSE_URL text DEFAULT NULL
+);
