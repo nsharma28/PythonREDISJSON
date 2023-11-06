@@ -20,3 +20,8 @@ class lastReadFile(CamelModel,BaseModel):
     
 class deleteModel(CamelModel,BaseModel):
     bfcid_array:List[str]
+    
+class dataStatsModel(CamelModel,BaseModel):
+    totalRecordsProcessed: int = 0
+    totalMissingLatLongRecords: int = 0
+    totalErrorRecords: int = 0
