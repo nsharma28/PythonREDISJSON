@@ -12,6 +12,8 @@ configDict = MyConvert.to_dict(config_dict.get("log"))
 
 try:
     log_path = MyConvert.to_string(configDict.get("logPath"))
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    log_file_name = f"osm_log_{current_date}.log"
     logger_name = MyConvert.to_string(configDict.get("loggerName"))
     log_format = MyConvert.to_string(configDict.get("logFormat"))
     log_level = logging.INFO
@@ -21,7 +23,7 @@ try:
     logging.basicConfig(level=log_level)
     logger_instance = logging.getLogger(logger_name)
     logger_instance_file_handler = TimedRotatingFileHandler(
-        log_path,
+        log_path+log_file_name,
         when=when,
         interval=log_interval,
         backupCount=backup_count,
