@@ -33,3 +33,7 @@ _media_insert_file.close()
 __user_insert_file = open("queries/insert_user.sql", 'r')
 user_insert_query = __user_insert_file.read()
 __user_insert_file.close()
+
+__openhouse_insert_file = open("queries/insert_openhouse.sql", 'r')
+openhouse_insert_query = __openhouse_insert_file.read()
+__openhouse_insert_file.close()
