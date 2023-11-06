@@ -68,28 +68,26 @@ class DataService:
         batch_docs = [new_file_list[index : index+2] for index in range(0,len(new_file_list),2)]
         time_docs = [new_file_list_timestamp[index : index+2] for index in range(0,len(new_file_list_timestamp),2)]
         thread_count = [i + 1 for i in range(len(batch_docs))]
-        processed_count = 0
+        datastatsforlog = dataStatsModel()
         
         with ThreadPoolExecutor(3) as executor:
            #print('batch_docs::::',batch_docs)
            #print('time_docs::::',time_docs)
            result =  list(executor.map(DataService.processandinsert,batch_docs,(mymlsType.mls_name,)* len(batch_docs),time_docs,thread_count))
            print(result)
-           processed_count = processed_count + result[0]
+           for rs in result:
+                datastatsforlog.totalRecordsProcessed = datastatsforlog.totalRecordsProcessed + rs.totalRecordsProcessed
+                datastatsforlog.totalMissingLatLongRecords = datastatsforlog.totalMissingLatLongRecords + rs.totalMissingLatLongRecords
+                datastatsforlog.totalErrorRecords = datastatsforlog.totalErrorRecords + rs.totalErrorRecords
         
         process_end_time = time.time()
         log = Log()
         print(f"Total DB Insertion Took : {process_end_time - process_start_time} seconds")
         log.write(f"Total DB Insertion Took : {process_end_time - process_start_time} seconds")
-        log.write(f"Total Records Processed : {processed_count}")
-        
-        # data_to_insert = mappinginstance.restructure_data(new_file_list,mymlsType.mls_name)
-        # property_data = list(data_to_insert['PROPERTY_SECTION'].values())
-        # feature_data = list(data_to_insert['FEATURES_SECTION'].values())
-        
-        # sql.execute_batch(sql_query.property_insert_query, property_data)
-        # #print('property_insertion_status',property_insertion_status)
-        # return sql.execute_batch(sql_query.feature_insert_query, feature_data)
+        log.write(f"Total Records Processed : {datastatsforlog.totalRecordsProcessed}")
+        log.write(f"Total Records With Missing Coordinates : {datastatsforlog.totalMissingLatLongRecords}")
+        log.write(f"Total Records With Error : {datastatsforlog.totalErrorRecords}")
+        log.write(f"==================================================={'==='}")
         
         return result
         
@@ -106,6 +104,10 @@ class DataService:
         openhouse_data = list(data_to_insert['OPENHOUSE_SECTION'].values())
         bfcid_array = (list(data_to_insert['PROPERTY_SECTION'].keys()),)
         
+        datastats = dataStatsModel()
+        datastats.totalRecordsProcessed = len(bfcid_array[0])
+        datastats.totalMissingLatLongRecords = data_to_insert['MISSING_LATLON']
+        datastats.totalErrorRecords = data_to_insert['ERROR_DATA']
         
         connecton_obj = sql.open_connection()
         try:
@@ -147,6 +149,6 @@ class DataService:
         finally:
             sql.close_connection(connecton_obj)
         
-        return len(bfcid_array[0])
+        return datastats
             
         
