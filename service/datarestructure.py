@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os
 from common.MyConvert import MyConvert
@@ -9,10 +10,12 @@ class Mapping:
     feature_mapping_flags = {}
     user_mapping_flags = {}
     media_mapping_flags = {}
+    openhouse_mapping_flags = {}
     
     def __init__(self, data_path=None):
+        pass
         #self.field_mapping_flags = {}
-        self.data_path = data_path
+        #self.data_path = data_path
         
     def prepare_mapping_object(self,properties_file,table_name):
         field_mapping_flags = {}
@@ -60,6 +63,17 @@ class Mapping:
                         flag = flag.strip()
                         field_mapping_flags[key] = {'value': value, 'flag': flag}
             Mapping.user_mapping_flags = field_mapping_flags
+            
+        if table_name == 'openhouse':
+            with open(properties_file, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        key, value, flag = line.strip().split("|")
+                        key = key.strip()
+                        value = value.strip()
+                        flag = flag.strip()
+                        field_mapping_flags[key] = {'value': value, 'flag': flag}
+            Mapping.openhouse_mapping_flags = field_mapping_flags
             
         
     def create_bfcid(field_value):
@@ -124,6 +138,22 @@ class Mapping:
             user_section[key] = field_value if field_value is not None else None
         user_data = user_section
         return user_data
+    
+    def prepare_openhouse_object(entry):
+        openhouse_section = {}
+        openhouse_data = {}
+        bfcid = Mapping.create_bfcid(entry.get('ListingKey'))
+        for key, field_mapping in Mapping.openhouse_mapping_flags.items():
+            field_value = entry.get(field_mapping['value'])
+            if key == 'BFCID' and field_value is not None:
+                field_value = bfcid
+            elif (key == 'OPEN_ST_TIME' or key == 'OPEN_END_TIME')  and field_value is not None:
+                format = "%Y-%m-%dT%H:%M:%S.%fZ"
+                datetime_obj = datetime.strptime(field_value, format)
+                field_value = datetime_obj.time()
+            openhouse_section[key] = field_value if field_value is not None else None
+        openhouse_data = openhouse_section
+        return openhouse_data
         
     def prepare_property_object(entry):
         property_section = {}
@@ -189,6 +219,7 @@ class Mapping:
         combined_features_data = {}
         combined_user_data = {}
         combined_media_data = {}
+        combined_openhouse_data = {}
         
         for file_name in file_list:
             filetoopen = data_path+'\\'+file_name
@@ -205,108 +236,115 @@ class Mapping:
                 print(f"An unexpected error occurred: {e}")
                 data = {}  # Assign an empty dictionary or another default value
             restructured_data = {}
-
-            for entry in data['value']:
-               
-               # to handle nested object 
-                #mls_number = entry.get(Mapping.property_mapping_flags['BFCID']['value'])
-                mls_number = Mapping.create_bfcid(entry.get(Mapping.property_mapping_flags['BFCID']['value']))
-                if mls_number:
-                   
-                    property_section = {}
-                    features_section = {}
-                    user_section = {}
-                    
-                    media_section_separate = Mapping.prepare_media_object(entry)
-                    property_section_separate = Mapping.prepare_property_object(entry)
-                    feature_section_separate = Mapping.prepare_feature_object(entry)
-                    user_section_separate = Mapping.prepare_user_object(entry)
-
-                    # for key, field_mapping in Mapping.field_mapping_flags.items():
-                    #     field_value = entry.get(field_mapping['value'])
-                    #     if field_mapping['flag'] == 'P':
-                    #         if key == 'MISC' and field_value is not None:  # Handle MISC field within PROPERTY section
-                    #             misc_keys = [k.strip() for k in field_value.split(',')]
-                    #             misc_values = [entry.get(k.strip()) for k in misc_keys]
-                    #             #print(misc_values)
-                    #             property_section[key] = '|'.join([f"{k}:{v}" for k, v in zip(misc_keys, misc_values) if v is not None])
-                    #             #print(property_section)
-                    #         elif key == 'DISPLAY_ADDRESS' or key == 'DISPLAY_LISTING':
-                    #             property_section[key] = 2 if field_value is True else 0
-                    #         elif key == 'ADDRESS':
-                    #             StreetNumber = entry.get('StreetNumber')
-                    #             StreetName = entry.get('StreetName')
-                    #             StreetDirPrefix = entry.get('StreetDirPrefix')
-                    #             StreetSuffix = entry.get('StreetSuffix')
-                    #             StreetDirSuffix = entry.get('StreetDirSuffix')
-                    #             values = [value for value in [StreetNumber, StreetName, StreetDirPrefix, StreetSuffix, StreetDirSuffix] if value is not None]
-                    #             property_section[key] = ','.join(values)
-                    #         else:
-                    #             property_section[key] = field_value if field_value is not None else None
-                                
-                                
-                    #     elif field_mapping['flag'] == 'M':
-                    #         pass
-                    #         #media_section[key] = field_value if field_value is not None else None
-                            
-                    #     elif field_mapping['flag'] == 'U':
-                            
-                    #         if key == 'OFFICE_NAME' and field_value is not None:
-                    #             field_value = '' + field_value + ''
-                                
-                    #         user_section[key] = field_value if field_value is not None else None
-                            
-                    #     elif field_mapping['flag'] == 'F':
-                    #         if key == 'NUMFLOORS':
-                    #             StoriesTotaltmp = entry.get('StreetNumber')
-                    #             StoriesTotal = str(StoriesTotaltmp) if StoriesTotaltmp is not None else None
-                    #             Storiestmp = entry.get('Stories')
-                    #             Stories = str(Storiestmp) if Storiestmp is not None else None
-                    #             Levelstmp = entry.get('Levels')
-                    #             Levels = str(Levelstmp) if Levelstmp is not None else None
-                    #             values = [value for value in [StoriesTotal, Stories, Levels] if value is not None]
-                    #             try:
-                    #                 field_value = ','.join(values)
-                    #             except Exception as e:
-                    #                 print('Error in generating NUMFLOORS',e)
-                    #         features_section[key] = field_value if field_value is not None else None
-                            
-                    #     elif field_mapping['flag'] == 'A':  # processing fields that are common for all tables
-                    #         if key == 'BFCID' and field_value is not None:
-                    #             #field_value = Mapping.create_bfcid(field_value) # creating BFCID
-                    #             field_value = mls_number
-                               
-                    #         #media_section[key] = field_value if field_value is not None else None
-                    #         features_section[key] = field_value if field_value is not None else None
-                    #         property_section[key] = field_value if field_value is not None else None
-                    #         user_section[key] = field_value if field_value is not None else None
-                            
-                    if property_section_separate:
-                        #item['PROPERTY'] = property_section
-                        combined_property_data[mls_number] = property_section_separate
-
-                    if media_section_separate:
-                        #item['MEDIA'] = media_section
-                        #media_data[mls_number] = media_section
-                        for key, value in media_section_separate.items():
-                            if key in combined_media_data:
-                                pass
-                                #combined_media_data[key].append(value)
-                            else:
-                                combined_media_data[key] = value
-                                
+            
+            if 'openhouse' in file_name:
+                
+                for entry in data['value']:
+                    mls_number = Mapping.create_bfcid(entry.get(Mapping.property_mapping_flags['BFCID']['value']))
+                    if mls_number:
+                        openhouse_section_separate = Mapping.prepare_openhouse_object(entry)
                         
-                        #media_data.append(media_section_separate)
+                        if openhouse_section_separate:
+                            combined_openhouse_data[mls_number] = openhouse_section_separate
+            else:
 
-                    if feature_section_separate:
-                        #item['FEATURES'] = features_section
-                        combined_features_data[mls_number] = feature_section_separate
+                for entry in data['value']:
+                
+                # to handle nested object 
+                    #mls_number = entry.get(Mapping.property_mapping_flags['BFCID']['value'])
+                    mls_number = Mapping.create_bfcid(entry.get(Mapping.property_mapping_flags['BFCID']['value']))
+                    if mls_number:
                         
-                    if user_section_separate:
-                        #item['FEATURES'] = features_section
-                        combined_user_data[mls_number] = user_section_separate
+                        media_section_separate = Mapping.prepare_media_object(entry)
+                        property_section_separate = Mapping.prepare_property_object(entry)
+                        feature_section_separate = Mapping.prepare_feature_object(entry)
+                        user_section_separate = Mapping.prepare_user_object(entry)
 
-                    #restructured_data[mls_number] = item
+                        # for key, field_mapping in Mapping.field_mapping_flags.items():
+                        #     field_value = entry.get(field_mapping['value'])
+                        #     if field_mapping['flag'] == 'P':
+                        #         if key == 'MISC' and field_value is not None:  # Handle MISC field within PROPERTY section
+                        #             misc_keys = [k.strip() for k in field_value.split(',')]
+                        #             misc_values = [entry.get(k.strip()) for k in misc_keys]
+                        #             #print(misc_values)
+                        #             property_section[key] = '|'.join([f"{k}:{v}" for k, v in zip(misc_keys, misc_values) if v is not None])
+                        #             #print(property_section)
+                        #         elif key == 'DISPLAY_ADDRESS' or key == 'DISPLAY_LISTING':
+                        #             property_section[key] = 2 if field_value is True else 0
+                        #         elif key == 'ADDRESS':
+                        #             StreetNumber = entry.get('StreetNumber')
+                        #             StreetName = entry.get('StreetName')
+                        #             StreetDirPrefix = entry.get('StreetDirPrefix')
+                        #             StreetSuffix = entry.get('StreetSuffix')
+                        #             StreetDirSuffix = entry.get('StreetDirSuffix')
+                        #             values = [value for value in [StreetNumber, StreetName, StreetDirPrefix, StreetSuffix, StreetDirSuffix] if value is not None]
+                        #             property_section[key] = ','.join(values)
+                        #         else:
+                        #             property_section[key] = field_value if field_value is not None else None
+                                    
+                                    
+                        #     elif field_mapping['flag'] == 'M':
+                        #         pass
+                        #         #media_section[key] = field_value if field_value is not None else None
+                                
+                        #     elif field_mapping['flag'] == 'U':
+                                
+                        #         if key == 'OFFICE_NAME' and field_value is not None:
+                        #             field_value = '' + field_value + ''
+                                    
+                        #         user_section[key] = field_value if field_value is not None else None
+                                
+                        #     elif field_mapping['flag'] == 'F':
+                        #         if key == 'NUMFLOORS':
+                        #             StoriesTotaltmp = entry.get('StreetNumber')
+                        #             StoriesTotal = str(StoriesTotaltmp) if StoriesTotaltmp is not None else None
+                        #             Storiestmp = entry.get('Stories')
+                        #             Stories = str(Storiestmp) if Storiestmp is not None else None
+                        #             Levelstmp = entry.get('Levels')
+                        #             Levels = str(Levelstmp) if Levelstmp is not None else None
+                        #             values = [value for value in [StoriesTotal, Stories, Levels] if value is not None]
+                        #             try:
+                        #                 field_value = ','.join(values)
+                        #             except Exception as e:
+                        #                 print('Error in generating NUMFLOORS',e)
+                        #         features_section[key] = field_value if field_value is not None else None
+                                
+                        #     elif field_mapping['flag'] == 'A':  # processing fields that are common for all tables
+                        #         if key == 'BFCID' and field_value is not None:
+                        #             #field_value = Mapping.create_bfcid(field_value) # creating BFCID
+                        #             field_value = mls_number
+                                
+                        #         #media_section[key] = field_value if field_value is not None else None
+                        #         features_section[key] = field_value if field_value is not None else None
+                        #         property_section[key] = field_value if field_value is not None else None
+                        #         user_section[key] = field_value if field_value is not None else None
+                                
+                        if property_section_separate:
+                            #item['PROPERTY'] = property_section
+                            combined_property_data[mls_number] = property_section_separate
+
+                        if media_section_separate:
+                            #item['MEDIA'] = media_section
+                            #media_data[mls_number] = media_section
+                            for key, value in media_section_separate.items():
+                                if key in combined_media_data:
+                                    pass
+                                    #combined_media_data[key].append(value)
+                                else:
+                                    combined_media_data[key] = value
+                                    
+                            
+                            #media_data.append(media_section_separate)
+
+                        if feature_section_separate:
+                            #item['FEATURES'] = features_section
+                            combined_features_data[mls_number] = feature_section_separate
+                            
+                        if user_section_separate:
+                            #item['FEATURES'] = features_section
+                            combined_user_data[mls_number] = user_section_separate
+
+                        #restructured_data[mls_number] = item
        
         
        
@@ -314,6 +352,7 @@ class Mapping:
         final_item['MEDIA_SECTION'] = combined_media_data
         final_item['FEATURES_SECTION'] = combined_features_data
         final_item['USER_SECTION'] = combined_user_data
+        final_item['OPENHOUSE_SECTION'] = combined_openhouse_data
         
         # inserting last read file 
         
