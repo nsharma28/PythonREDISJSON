@@ -1,0 +1,145 @@
+-- Function: dbt_source.fn_getPropertyList(text, text, text)
+
+-- DROP FUNCTION dbt_source.fn_getPropertyList(text, text, text);
+
+CREATE OR REPLACE FUNCTION dbt_source.fn_getPropertyList(
+    p_city text,
+    p_state text,
+    p_propType text,
+	p_minPrice integer default null,
+	p_maxPrice integer default null,
+	p_numBedrooms integer default null,
+	p_numBathrooms integer default null,
+	p_propSubType text default null,
+	p_sqFoot integer default null,
+	p_numStories integer default null,
+	p_minYear integer default null,
+	p_maxYear integer default null,
+	p_mls text default null,
+	p_listingStatus text default null,
+	p_viewType text default null,
+	p_lotSize integer default null,
+	p_listingType text default null,
+	p_garageSpace integer default null,
+	p_lat float default null,
+	p_lon float default null)
+  RETURNS TABLE(bfcid bigint, price character varying, beds smallint, bath smallint, photoUrl text, link text, lat double precision, lon double precision,  sqft integer, pintitle character varying, status character varying, mls_number_title character varying, datasource character varying, courtesy text, copyright text, vtour_url text) AS
+$BODY$
+
+ 
+DECLARE 	
+	 table2query text;
+     sqlquery text;
+     
+ BEGIN 	
+	
+    -- select * from dbt_source.fn_getPropertyList('Denver','CO','Residential',355000,1139900,3,3,'Single Family Residence',600,0,1990,2023,null,'Active',null,2000,null,null,39.81042167,-104.8708458);
+    
+ 
+	RETURN QUERY select
+					p.bfcid,
+					concat('$',p.curr_listprice)::character varying as curr_listprice,
+					p.beds,
+					p.baths,
+					''::text as photoUrl,
+					p.LISTING_URL as link,
+					p.latitude as lat,
+					p.longitude as lon,
+					p.areasqft as sqft,
+					p.title as pintitle,
+					p.status,
+					p.mls_number as mls_number_title,
+					p.datasource,
+					''::text as courtesy,
+					''::text as copyright,
+					p.vtour_url
+				from dbt_source.property_ptnf p
+				where
+				p.city = p_city and
+				p.state = p_state and
+				p.type = any(string_to_array(p_propType,',')::character varying[]) and
+				case
+					when (p_minPrice is not null and p_maxPrice is not null) then p.curr_listprice between p_minPrice and p_maxPrice
+					else true
+				end and 
+				case
+					when p_numBedrooms is not null then p.beds = p_numBedrooms
+					else true
+				end and
+				case
+					when p_numBathrooms is not null then p.baths = p_numBathrooms
+					else true
+				end and
+				case
+					when p_propSubType is not null then p.subtype = any(string_to_array(p_propSubType,',')::character varying[])
+				    else true
+				end and
+				case
+					when p_sqFoot is not null then p.areasqft > p_sqFoot
+					else true
+				end and
+				case
+					when (p_minYear is not null and p_maxYear is not null) then p.year_built between p_minYear and p_maxYear
+					else true
+				end and
+				case
+					when p_mls is not null then p.mls_number = any(string_to_array(p_mls,',')::character varying[])
+				    else true
+				end and
+				case
+					when p_listingStatus is not null then p.status = any(string_to_array(p_listingStatus,',')::character varying[])
+				    else true
+				end and
+				case
+					when p_lotSize is not null then p.lotsqft > p_lotSize
+					else true
+				end and
+				case
+					when p_lat is not null and p_lon is not null then st_intersects(geom,st_buffer(st_point(p.longitude, p.latitude),0.0114))
+					else true
+				end;
+				
+	
+	/*
+	
+	
+    sqlquery = 'select distinct a.link_id, 
+    							a.highway_nm,
+                                a.functionclass ,
+                                a.direction, 
+                                a.roadway,
+                                round(a.postedspeedinmph)::real,  
+                                a.county,
+                                a.ramp,
+                                a.poing_desc,
+                                st_length(a.geom,true) as dfe_length,
+                                b.intersection_length, 
+                                b.intersection_per, 
+                                st_length(c.geom_2d,true), 
+                                d.totaldfe_len
+     					 from (
+      							select b.gid, 
+                                sum(b.intersection_length) as totaldfe_len from '||maptable2query||' b
+       					where b.link_id IN ( SELECT unnest(string_to_array('''||p_linkid||''','','')::bigint[]))
+      					AND b.gid IN ( SELECT distinct unnest(string_to_array('''||p_gid||''','','')::int[])) group by b.gid
+          						) d, 
+         					tmclinkmapping a
+         					join '||maptable2query||' b
+     						on a.link_id = b.link_id
+     						join '||table2query||' c
+     						on c.gid = '||p_gid||'::bigint
+    					 where a.link_id IN ( SELECT unnest(string_to_array('''||p_linkid||''','','')::bigint[]))
+      					 AND b.gid IN ( SELECT distinct unnest(string_to_array('''||p_gid||''','','')::int[]));';
+      
+      RAISE NOTICE ' sqlquery: %', sqlquery;
+    --  select pg_sleep(10);
+      RETURN QUERY execute sqlquery;*/
+	  
+	  
+ 
+END;  
+
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100
+  ROWS 1000;
