@@ -1,30 +1,35 @@
--- Function: dbt_source.fn_getPropertyList(text, text, text)
+-- FUNCTION: dbt_source.fn_getpropertylist(text, text, text, integer, integer, integer, integer, text, integer, integer, integer, integer, text, text, text, integer, text, integer, double precision, double precision)
 
--- DROP FUNCTION dbt_source.fn_getPropertyList(text, text, text);
+-- DROP FUNCTION IF EXISTS dbt_source.fn_getpropertylist(text, text, text, integer, integer, integer, integer, text, integer, integer, integer, integer, text, text, text, integer, text, integer, double precision, double precision);
 
-CREATE OR REPLACE FUNCTION dbt_source.fn_getPropertyList(
-    p_city text,
-    p_state text,
-    p_propType text,
-	p_minPrice integer default null,
-	p_maxPrice integer default null,
-	p_numBedrooms integer default null,
-	p_numBathrooms integer default null,
-	p_propSubType text default null,
-	p_sqFoot integer default null,
-	p_numStories integer default null,
-	p_minYear integer default null,
-	p_maxYear integer default null,
-	p_mls text default null,
-	p_listingStatus text default null,
-	p_viewType text default null,
-	p_lotSize integer default null,
-	p_listingType text default null,
-	p_garageSpace integer default null,
-	p_lat float default null,
-	p_lon float default null)
-  RETURNS TABLE(bfcid bigint, price character varying, beds smallint, bath smallint, photoUrl text, link text, lat double precision, lon double precision,  sqft integer, pintitle character varying, status character varying, mls_number_title character varying, datasource character varying, courtesy text, copyright text, vtour_url text) AS
-$BODY$
+CREATE OR REPLACE FUNCTION dbt_source.fn_getpropertylist(
+	p_city text,
+	p_state text,
+	p_proptype text,
+	p_minprice integer DEFAULT NULL::integer,
+	p_maxprice integer DEFAULT NULL::integer,
+	p_numbedrooms integer DEFAULT NULL::integer,
+	p_numbathrooms integer DEFAULT NULL::integer,
+	p_propsubtype text DEFAULT NULL::text,
+	p_sqfoot integer DEFAULT NULL::integer,
+	p_numstories integer DEFAULT NULL::integer,
+	p_minyear integer DEFAULT NULL::integer,
+	p_maxyear integer DEFAULT NULL::integer,
+	p_mls text DEFAULT NULL::text,
+	p_listingstatus text DEFAULT NULL::text,
+	p_viewtype text DEFAULT NULL::text,
+	p_lotsize integer DEFAULT NULL::integer,
+	p_listingtype text DEFAULT NULL::text,
+	p_garagespace integer DEFAULT NULL::integer,
+	p_lat double precision DEFAULT NULL::double precision,
+	p_lon double precision DEFAULT NULL::double precision)
+    RETURNS TABLE(bfcid bigint, price character varying, beds smallint, bath smallint, photourl text, link text, lat double precision, lon double precision, sqft integer, pintitle character varying, status character varying, mls_number_title character varying, datasource character varying, courtesy text, copyright text, vtour_url text) 
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
 
  
 DECLARE 	
@@ -33,7 +38,7 @@ DECLARE
      
  BEGIN 	
 	
-    -- select * from dbt_source.fn_getPropertyList('Denver','CO','Residential',355000,1139900,3,3,'Single Family Residence',600,0,1990,2023,null,'Active',null,2000,null,null,39.81042167,-104.8708458);
+    -- select * from dbt_source.fn_getPropertyList('Denver','CO','Residential',355000,1139900,3,3,'Single Family Residence',600,0,1990,2023,null,'Active','Mountain(s)',2000,null,1,39.81042167,-104.8708458);
     
  
 	RETURN QUERY select
@@ -54,6 +59,7 @@ DECLARE
 					''::text as copyright,
 					p.vtour_url
 				from dbt_source.property_ptnf p
+				inner join dbt_source.features_ptnf f on p.bfcid = f.bfcid
 				where
 				p.city = p_city and
 				p.state = p_state and
@@ -97,6 +103,14 @@ DECLARE
 				case
 					when p_lat is not null and p_lon is not null then st_intersects(geom,st_buffer(st_point(p.longitude, p.latitude),0.0114))
 					else true
+				end and
+				case
+					when p_garagespace is not null then f.numparkingspaces > p_garagespace 
+					else true
+				end and
+				case
+					when p_viewtype is not null then string_to_array(p_viewtype,',')::character varying[] && f.viewtype
+					else true
 				end;
 				
 	
@@ -139,7 +153,7 @@ DECLARE
  
 END;  
 
-$BODY$
-  LANGUAGE plpgsql VOLATILE
-  COST 100
-  ROWS 1000;
+$BODY$;
+
+ALTER FUNCTION dbt_source.fn_getpropertylist(text, text, text, integer, integer, integer, integer, text, integer, integer, integer, integer, text, text, text, integer, text, integer, double precision, double precision)
+    OWNER TO postgres;
