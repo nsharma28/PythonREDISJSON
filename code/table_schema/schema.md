@@ -4,8 +4,10 @@
 
 CREATE TABLE IF NOT EXISTS dbt_source.features_ptnf
 (
-    id bigint NOT NULL DEFAULT 'nextval('dbt_source.features_ptnf_id_seq'::regclass)',
-    bfcid bigint,
+    id bigserial NOT NULL primary key,
+    bfcid bigint REFERENCES dbt_source.property_ptnf (bfcid) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE,
     mls_number character varying(45) COLLATE pg_catalog."default",
     appliance character varying[] COLLATE pg_catalog."default",
     architecturestyle character varying[] COLLATE pg_catalog."default",
@@ -44,13 +46,7 @@ CREATE TABLE IF NOT EXISTS dbt_source.features_ptnf
     zoning text COLLATE pg_catalog."default",
     taxyear text COLLATE pg_catalog."default",
     taxamount text COLLATE pg_catalog."default",
-    addl_features text COLLATE pg_catalog."default",
-    CONSTRAINT features_ptnf_pkey PRIMARY KEY (id),
-    CONSTRAINT features_ptnf_bfcid_key UNIQUE (bfcid),
-    CONSTRAINT features_ptnf_bfcid_fkey FOREIGN KEY (bfcid)
-        REFERENCES dbt_source.property_ptnf (bfcid) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE CASCADE
+    addl_features text COLLATE pg_catalog."default"
 )
 
 TABLESPACE pg_default;
