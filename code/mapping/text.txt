@@ -1,1 +1,5 @@
-sample
+null-details
+p_garageSpace=>NUMPARKINGSPACES
+p_listingType=>PROPERTY_TYPE
+p_propSubType=>SUBTYPE
+p_mls=>DATASOURCE [Name of the MLS-Short Form of the MLS] for this MLS we will keep it as RECOLORADO.
