@@ -8,17 +8,13 @@ VIEWTYPE[features]
 
 
 search parameter Recolorado
-
-
 Search parameter
-
 AutoComplete
 - City,State - CITY,STATE
 - Neighbourhod - niName
 - zip - Zip
 - address- Address
 - mls_number- MLS_NUMBER
-
 
 => Drop Down
 - min Price, max Price - CURR_LISTPRICE
@@ -31,17 +27,14 @@ AutoComplete
 - View Type- VIEW
 - Stories - NUMFLOOR
 - Garage Space - NUMPARKINGSPACE
-- 
 
-
-
-=> Multi Select:
+=> Multi Select box:
 - City - CITY
 - Zip - ZIP
 - County - COUNTY
 - Style - ARCHITECTURESTYLE
 
-Listing Type Drowpdown
+Listing Type Dropdown
 - Broker Listing  - BROKER_CODE
 - Only Open Homes - openhouse_ptnf table
 - New Listings - LISTDATE - last 7days
