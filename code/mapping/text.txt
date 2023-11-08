@@ -3,3 +3,98 @@ p_garageSpace=>NUMPARKINGSPACES
 p_listingType=>PROPERTY_TYPE
 p_propSubType=>SUBTYPE
 p_mls=>DATASOURCE [Name of the MLS-Short Form of the MLS] for this MLS we will keep it as RECOLORADO.
+VIEWTYPE[features]
+
+
+
+search parameter Recolorado
+
+
+Search parameter
+
+AutoComplete
+- City,State - CITY,STATE
+- Neighbourhod - niName
+- zip - Zip
+- address- Address
+- mls_number- MLS_NUMBER
+
+
+=> Drop Down
+- min Price, max Price - CURR_LISTPRICE
+- Beds - BEDS
+- Baths - BATH
+- Status- STATUS
+- PropertyType - TYPE
+- Garage - PARKINGTYPE
+- Subtype - PROPERTYSUBTYPE
+- View Type- VIEW
+- Stories - NUMFLOOR
+- Garage Space - NUMPARKINGSPACE
+- 
+
+
+
+=> Multi Select:
+- City - CITY
+- Zip - ZIP
+- County - COUNTY
+- Style - ARCHITECTURESTYLE
+
+Listing Type Drowpdown
+- Broker Listing  - BROKER_CODE
+- Only Open Homes - openhouse_ptnf table
+- New Listings - LISTDATE - last 7days
+- Only Virtual Tour - VTOUR_URL
+- Exclusive Collection - CURR_LISTPRICE , 1L or price +
+- Short Sale Listing - SPORTSCOURT (OLD DB)
+- Bankowned Listing - SPORTSCOURT(OLD DB)
+- Coming Soon - STATUS
+- Favourite listing 
+- Featured listing
+
+-->Range 
+Square feet min. - LIVINGAREA_SQFT
+Square feet max - LIVINGAREA_SQFT
+
+Acres min - ACRES(MISC) OR LOTSQFT
+acres max - ACRES(MISC) OR LOTSQFT
+
+Year Built - YEARBUILT
+Start to end - YEAR BUILT
+
+Datasource (MlS Source) - DATASOURCE
+
+Keyword Search- from DESCRIPTION 
+
+Check box
+- Firepalce - FIREPLACE
+- only those with Photos - links_ptnf or PHOTO_COUNT
+- New Construction - NEWCONSTRUCTION
+- Pool - POOL 
+- Fireplace - FIREPLACE
+
+
+
+--------------------
+
+Search Result:
+
+
+ADDRESS
+CITY
+STATE
+ZIP
+MLS_NUMBER
+STATUS
+OFFICE_NAME - BROKER_NMAE
+DATASOURCE fullname with copyrights
+MAIN_PHOTO
+BEDS
+BATH
+YEARBUILT
+LIVINGAREASQFT
+LOTSQFT
+
+Quick View
+add DESCRIPTION and all Photos (links_ptnf)
