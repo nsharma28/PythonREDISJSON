@@ -62,18 +62,15 @@ ALTER TABLE IF EXISTS dbt_source.features_ptnf
 
 CREATE TABLE IF NOT EXISTS dbt_source.media_ptnf
 (
-    id bigint NOT NULL DEFAULT 'nextval('dbt_source.media_ptnf_id_seq'::regclass)',
-    bfcid bigint NOT NULL,
+    id bigserial NOT NULL primary key,
+    bfcid bigint REFERENCES dbt_source.property_ptnf (bfcid) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE,
     mls_number character varying(45) COLLATE pg_catalog."default",
     photo_type character varying(10) COLLATE pg_catalog."default",
     caption text COLLATE pg_catalog."default",
     url text COLLATE pg_catalog."default",
-    photoorder integer,
-    CONSTRAINT media_ptnf_pkey PRIMARY KEY (id),
-    CONSTRAINT media_ptnf_bfcid_fkey FOREIGN KEY (bfcid)
-        REFERENCES dbt_source.property_ptnf (bfcid) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE CASCADE
+    photoorder integer
 )
 
 TABLESPACE pg_default;
@@ -88,8 +85,8 @@ ALTER TABLE IF EXISTS dbt_source.media_ptnf
 
 CREATE TABLE IF NOT EXISTS dbt_source.property_ptnf
 (
-    id bigint NOT NULL DEFAULT 'nextval('dbt_source.property_ptnf_id_seq'::regclass)',
-    bfcid bigint NOT NULL,
+    id bigserial NOT NULL,
+    bfcid bigint NOT NULL PRIMARY KEY,
     mls_number character varying(45) COLLATE pg_catalog."default",
     datasource character varying(50) COLLATE pg_catalog."default" NOT NULL,
     unit_number character varying(10) COLLATE pg_catalog."default",
@@ -151,8 +148,7 @@ CREATE TABLE IF NOT EXISTS dbt_source.property_ptnf
     extra3 text COLLATE pg_catalog."default",
     extra4 character varying(2) COLLATE pg_catalog."default",
     extra5 character varying(2) COLLATE pg_catalog."default",
-    postinguser_id bigint,
-    CONSTRAINT property_ptnf_pkey PRIMARY KEY (bfcid)
+    postinguser_id bigint
 )
 
 TABLESPACE pg_default;
@@ -167,8 +163,10 @@ ALTER TABLE IF EXISTS dbt_source.property_ptnf
 
 CREATE TABLE IF NOT EXISTS dbt_source.user_ptnf
 (
-    id bigint NOT NULL DEFAULT 'nextval('dbt_source.user_ptnf_id_seq'::regclass)',
-    bfcid bigint NOT NULL,
+    id bigserial NOT NULL primary key,
+    bfcid bigint REFERENCES dbt_source.property_ptnf (bfcid) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE,
     mls_number character varying(45) COLLATE pg_catalog."default",
     user_sourceid character varying(50) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying',
     office_name character varying(150) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying',
@@ -179,12 +177,7 @@ CREATE TABLE IF NOT EXISTS dbt_source.user_ptnf
     user_code character varying(50) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying',
     licence_no character varying(50) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying',
     broker_type character varying(50) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying',
-    agent_type character varying(50) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying',
-    CONSTRAINT user_ptnf_pkey PRIMARY KEY (id),
-    CONSTRAINT user_ptnf_bfcid_fkey FOREIGN KEY (bfcid)
-        REFERENCES dbt_source.property_ptnf (bfcid) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE CASCADE
+    agent_type character varying(50) COLLATE pg_catalog."default" DEFAULT 'NULL::character varying'
 )
 
 TABLESPACE pg_default;
@@ -195,8 +188,8 @@ ALTER TABLE IF EXISTS dbt_source.user_ptnf
 
 drop table if exists dbt_source.openhouse_ptnf;
 CREATE TABLE dbt_source.openhouse_ptnf (
-   id bigserial NOT NULL PRIMARY KEY,
-   bfcid bigint NOT NULL,
+    id bigserial NOT NULL primary key,
+    bfcid bigint Not NULL,
    mls_number character varying(45),
   OPEN_DATE timestamp without time zone DEFAULT NULL,
   OPEN_ST_TIME time DEFAULT NULL,
