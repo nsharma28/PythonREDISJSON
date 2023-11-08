@@ -1,3 +1,80 @@
+ -- Table: dbt_source.property_ptnf
+
+-- DROP TABLE IF EXISTS dbt_source.property_ptnf;
+
+CREATE TABLE IF NOT EXISTS dbt_source.property_ptnf
+(
+    id bigserial NOT NULL,
+    bfcid bigint NOT NULL PRIMARY KEY,
+    mls_number character varying(45) COLLATE pg_catalog."default",
+    datasource character varying(50) COLLATE pg_catalog."default" NOT NULL,
+    unit_number character varying(10) COLLATE pg_catalog."default",
+    address character varying(60) COLLATE pg_catalog."default",
+    city character varying(40) COLLATE pg_catalog."default",
+    state character varying(2) COLLATE pg_catalog."default",
+    zip character varying(10) COLLATE pg_catalog."default",
+    county character varying(30) COLLATE pg_catalog."default",
+    latitude double precision DEFAULT 0,
+    longitude double precision DEFAULT 0,
+    type character varying(100) COLLATE pg_catalog."default",
+    subtype character varying(150) COLLATE pg_catalog."default",
+    title character varying(100) COLLATE pg_catalog."default",
+    description text COLLATE pg_catalog."default",
+    parcel_number character varying(50) COLLATE pg_catalog."default",
+    beds real,
+    baths real,
+    fullbaths real,
+    halfbaths real,
+    areasqft character varying(45) COLLATE pg_catalog."default",
+    lotsqft character varying(45) COLLATE pg_catalog."default",
+    year_built character varying(4) COLLATE pg_catalog."default",
+    display_address smallint DEFAULT 8,
+    display_listing smallint DEFAULT 4,
+    status character varying(30) COLLATE pg_catalog."default",
+    saledate date,
+    saleprice double precision,
+    listdate date,
+    orig_listprice double precision,
+    curr_listprice double precision,
+    days_on_market integer,
+    date_price_adjust date,
+    listing_url text COLLATE pg_catalog."default",
+    vtour_url text COLLATE pg_catalog."default",
+    modif_timestamp timestamp without time zone,
+    expiry_date date,
+    misc text COLLATE pg_catalog."default",
+    photo_count integer,
+    video_count integer,
+    photo_modif_date timestamp without time zone,
+    video_modif_date timestamp without time zone,
+    dist_school character varying(60) COLLATE pg_catalog."default",
+    elem_school character varying(60) COLLATE pg_catalog."default",
+    midl_school character varying(60) COLLATE pg_catalog."default",
+    high_school character varying(60) COLLATE pg_catalog."default",
+    nabrhd_name character varying(150) COLLATE pg_catalog."default",
+    nabrhd_desc text COLLATE pg_catalog."default",
+    nearby_url text COLLATE pg_catalog."default",
+    identifier character varying(255) COLLATE pg_catalog."default",
+    geolevel integer,
+    main_photo text COLLATE pg_catalog."default",
+    price_change double precision,
+    status_change character varying(30) COLLATE pg_catalog."default",
+    broker_code character varying(45) COLLATE pg_catalog."default",
+    broker_name character varying(150) COLLATE pg_catalog."default",
+    office_listing_yn smallint,
+    extra1 character varying(2) COLLATE pg_catalog."default",
+    extra2 character varying(2) COLLATE pg_catalog."default",
+    extra3 text COLLATE pg_catalog."default",
+    extra4 character varying(2) COLLATE pg_catalog."default",
+    extra5 character varying(2) COLLATE pg_catalog."default",
+    postinguser_id bigint
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS dbt_source.property_ptnf
+    OWNER to postgres;
+
 -- Table: dbt_source.features_ptnf
 
 -- DROP TABLE IF EXISTS dbt_source.features_ptnf;
@@ -76,84 +153,6 @@ CREATE TABLE IF NOT EXISTS dbt_source.media_ptnf
 TABLESPACE pg_default;
 
 ALTER TABLE IF EXISTS dbt_source.media_ptnf
-    OWNER to postgres;
-
-
-    -- Table: dbt_source.property_ptnf
-
--- DROP TABLE IF EXISTS dbt_source.property_ptnf;
-
-CREATE TABLE IF NOT EXISTS dbt_source.property_ptnf
-(
-    id bigserial NOT NULL,
-    bfcid bigint NOT NULL PRIMARY KEY,
-    mls_number character varying(45) COLLATE pg_catalog."default",
-    datasource character varying(50) COLLATE pg_catalog."default" NOT NULL,
-    unit_number character varying(10) COLLATE pg_catalog."default",
-    address character varying(60) COLLATE pg_catalog."default",
-    city character varying(40) COLLATE pg_catalog."default",
-    state character varying(2) COLLATE pg_catalog."default",
-    zip character varying(10) COLLATE pg_catalog."default",
-    county character varying(30) COLLATE pg_catalog."default",
-    latitude double precision DEFAULT 0,
-    longitude double precision DEFAULT 0,
-    type character varying(100) COLLATE pg_catalog."default",
-    subtype character varying(150) COLLATE pg_catalog."default",
-    title character varying(100) COLLATE pg_catalog."default",
-    description text COLLATE pg_catalog."default",
-    parcel_number character varying(50) COLLATE pg_catalog."default",
-    beds real,
-    baths real,
-    fullbaths real,
-    halfbaths real,
-    areasqft character varying(45) COLLATE pg_catalog."default",
-    lotsqft character varying(45) COLLATE pg_catalog."default",
-    year_built character varying(4) COLLATE pg_catalog."default",
-    display_address smallint DEFAULT 8,
-    display_listing smallint DEFAULT 4,
-    status character varying(30) COLLATE pg_catalog."default",
-    saledate date,
-    saleprice double precision,
-    listdate date,
-    orig_listprice double precision,
-    curr_listprice double precision,
-    days_on_market integer,
-    date_price_adjust date,
-    listing_url text COLLATE pg_catalog."default",
-    vtour_url text COLLATE pg_catalog."default",
-    modif_timestamp timestamp without time zone,
-    expiry_date date,
-    misc text COLLATE pg_catalog."default",
-    photo_count integer,
-    video_count integer,
-    photo_modif_date timestamp without time zone,
-    video_modif_date timestamp without time zone,
-    dist_school character varying(60) COLLATE pg_catalog."default",
-    elem_school character varying(60) COLLATE pg_catalog."default",
-    midl_school character varying(60) COLLATE pg_catalog."default",
-    high_school character varying(60) COLLATE pg_catalog."default",
-    nabrhd_name character varying(150) COLLATE pg_catalog."default",
-    nabrhd_desc text COLLATE pg_catalog."default",
-    nearby_url text COLLATE pg_catalog."default",
-    identifier character varying(255) COLLATE pg_catalog."default",
-    geolevel integer,
-    main_photo text COLLATE pg_catalog."default",
-    price_change double precision,
-    status_change character varying(30) COLLATE pg_catalog."default",
-    broker_code character varying(45) COLLATE pg_catalog."default",
-    broker_name character varying(150) COLLATE pg_catalog."default",
-    office_listing_yn smallint,
-    extra1 character varying(2) COLLATE pg_catalog."default",
-    extra2 character varying(2) COLLATE pg_catalog."default",
-    extra3 text COLLATE pg_catalog."default",
-    extra4 character varying(2) COLLATE pg_catalog."default",
-    extra5 character varying(2) COLLATE pg_catalog."default",
-    postinguser_id bigint
-)
-
-TABLESPACE pg_default;
-
-ALTER TABLE IF EXISTS dbt_source.property_ptnf
     OWNER to postgres;
 
 
