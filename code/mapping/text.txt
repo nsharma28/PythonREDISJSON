@@ -6,6 +6,20 @@ p_mls=>DATASOURCE [Name of the MLS-Short Form of the MLS] for this MLS we will k
 VIEWTYPE[features]
 
 
+Range Search [Free Text Box]:
+- min Price, max Price - CURR_LISTPRICE
+
+Square feet min. - LIVINGAREA_SQFT
+Square feet max - LIVINGAREA_SQFT
+
+Acres min - ACRES(MISC) OR LOTSQFT
+acres max - ACRES(MISC) OR LOTSQFT
+
+Year Built - YEARBUILT
+Start to end - YEAR BUILT
+
+
+
 
 search parameter Recolorado
 Search parameter
