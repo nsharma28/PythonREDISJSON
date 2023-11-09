@@ -199,3 +199,12 @@ CREATE TABLE dbt_source.openhouse_ptnf (
   OPEN_MODIF_TSTAMP timestamp without time zone DEFAULT NULL,
   OPENHOUSE_URL text DEFAULT NULL
 );
+
+
+CREATE TABLE IF NOT EXISTS dbt_source.filefeedstore_ptnf
+(
+    id bigint NOT NULL DEFAULT 'nextval('dbt_source.filefeedstore_ptnf_id_seq'::regclass)',
+    mls_name character varying(45) COLLATE pg_catalog."default",
+    file_name character varying(45) COLLATE pg_catalog."default" NOT NULL,
+    file_timestamp timestamp without time zone
+)
