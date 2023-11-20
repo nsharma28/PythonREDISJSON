@@ -172,6 +172,10 @@ class Mapping:
                 #print(property_section)
             elif key == 'DISPLAY_ADDRESS' or key == 'DISPLAY_LISTING':
                 property_section[key] = 2 if field_value is True else 0
+            elif key == 'DAYS_ON_MARKET' and field_value is None:
+                if entry.get('MlsStatus') in ['Closed','Sold'] and entry.get('CloseDate') is not None and entry.get('ListingContractDate') is not None:
+                    field_value = (datetime.strptime(entry.get('CloseDate'),"%Y-%m-%d") - datetime.strptime(entry.get('ListingContractDate'),"%Y-%m-%d")).days
+                property_section[key] = field_value if field_value is not None else None
             elif key == 'ADDRESS':
                 StreetNumber = entry.get('StreetNumber')
                 StreetName = entry.get('StreetName')
