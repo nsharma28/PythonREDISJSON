@@ -1,0 +1,100 @@
+-- FUNCTION: dbt_source.fn_getanalysisresult(text, text, text, integer, integer, integer, integer)
+
+-- DROP FUNCTION IF EXISTS dbt_source.fn_getanalysisresult(text, text, text, integer, integer, integer, integer);
+
+CREATE OR REPLACE FUNCTION dbt_source.fn_getanalysisresult(
+	p_city text,
+	p_state text,
+	p_proptype text,
+	p_minprice integer DEFAULT NULL::integer,
+	p_maxprice integer DEFAULT NULL::integer,
+	p_numbedrooms integer DEFAULT NULL::integer,
+	p_numbathrooms integer DEFAULT NULL::integer)
+    RETURNS TABLE(avgsale character varying, avgdays integer, numproperty integer) 
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+
+ 
+DECLARE 	
+	 table2query text;
+     sqlquery text;
+     
+ BEGIN 	
+	
+    -- select * from dbt_source.fn_getAnalysisResult('Denver','CO','Residential',355000,1139900,3,3);
+	-- select * from dbt_source.fn_getAnalysisResult('Denver','CO',null,null,null,null,null);
+    
+ 
+	RETURN QUERY select
+					concat('$',round(avg(p.saleprice)::numeric,2))::character varying as avgSale,
+					avg(p.days_on_market)::integer as avgDays,
+					count(bfcid)::integer as numProperty
+				from dbt_source.property_ptnf p
+				where
+				p.city = p_city and
+				p.state = p_state and
+				case
+					when (p_propType is not null) then p.type = any(string_to_array(p_propType,',')::character varying[])
+					else true
+				end and 
+				case
+					when (p_minPrice is not null and p_maxPrice is not null) then p.saleprice between p_minPrice and p_maxPrice
+					else true
+				end and 
+				case
+					when p_numBedrooms is not null then p.beds = p_numBedrooms
+					else true
+				end and
+				case
+					when p_numBathrooms is not null then p.fullbaths = p_numBathrooms
+					else true
+				end;
+				
+	
+	/*
+	
+	
+    sqlquery = 'select distinct a.link_id, 
+    							a.highway_nm,
+                                a.functionclass ,
+                                a.direction, 
+                                a.roadway,
+                                round(a.postedspeedinmph)::real,  
+                                a.county,
+                                a.ramp,
+                                a.poing_desc,
+                                st_length(a.geom,true) as dfe_length,
+                                b.intersection_length, 
+                                b.intersection_per, 
+                                st_length(c.geom_2d,true), 
+                                d.totaldfe_len
+     					 from (
+      							select b.gid, 
+                                sum(b.intersection_length) as totaldfe_len from '||maptable2query||' b
+       					where b.link_id IN ( SELECT unnest(string_to_array('''||p_linkid||''','','')::bigint[]))
+      					AND b.gid IN ( SELECT distinct unnest(string_to_array('''||p_gid||''','','')::int[])) group by b.gid
+          						) d, 
+         					tmclinkmapping a
+         					join '||maptable2query||' b
+     						on a.link_id = b.link_id
+     						join '||table2query||' c
+     						on c.gid = '||p_gid||'::bigint
+    					 where a.link_id IN ( SELECT unnest(string_to_array('''||p_linkid||''','','')::bigint[]))
+      					 AND b.gid IN ( SELECT distinct unnest(string_to_array('''||p_gid||''','','')::int[]));';
+      
+      RAISE NOTICE ' sqlquery: %', sqlquery;
+    --  select pg_sleep(10);
+      RETURN QUERY execute sqlquery;*/
+	  
+	  
+ 
+END;  
+
+$BODY$;
+
+ALTER FUNCTION dbt_source.fn_getanalysisresult(text, text, text, integer, integer, integer, integer)
+    OWNER TO postgres;
