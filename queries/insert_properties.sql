@@ -5,7 +5,7 @@ INSERT INTO dbt_source.property_ptnf (
                         VTOUR_URL, MODIF_TIMESTAMP, EXPIRY_DATE, MISC, PHOTO_COUNT, VIDEO_COUNT, PHOTO_MODIF_DATE,
                         VIDEO_MODIF_DATE, DIST_SCHOOL, ELEM_SCHOOL, MIDL_SCHOOL, HIGH_SCHOOL, NABRHD_NAME, NABRHD_DESC,
                         NEARBY_URL, IDENTIFIER, GEOLEVEL, MAIN_PHOTO, PRICE_CHANGE, STATUS_CHANGE, BROKER_CODE,
-                        BROKER_NAME, OFFICE_LISTING_YN
+                        BROKER_NAME, OFFICE_LISTING_YN,GEOM
                     )
                     VALUES (
                         %(BFCID)s,%(MLS_NUMBER)s, %(DATASOURCE)s, %(UNIT_NUMBER)s, %(ADDRESS)s, %(CITY)s, %(STATE)s, %(ZIP)s,
@@ -17,7 +17,7 @@ INSERT INTO dbt_source.property_ptnf (
                         %(MISC)s, %(PHOTO_COUNT)s, %(VIDEO_COUNT)s, %(PHOTO_MODIF_DATE)s, %(VIDEO_MODIF_DATE)s,
                         %(DIST_SCHOOL)s, %(ELEM_SCHOOL)s, %(MIDL_SCHOOL)s, %(HIGH_SCHOOL)s, %(NABRHD_NAME)s,
                         %(NABRHD_DESC)s, %(NEARBY_URL)s, %(IDENTIFIER)s, %(GEOLEVEL)s, %(MAIN_PHOTO)s,
-                        %(PRICE_CHANGE)s, %(STATUS_CHANGE)s, %(BROKER_CODE)s, %(BROKER_NAME)s, %(OFFICE_LISTING_YN)s
+                        %(PRICE_CHANGE)s, %(STATUS_CHANGE)s, %(BROKER_CODE)s, %(BROKER_NAME)s, %(OFFICE_LISTING_YN)s, st_point(%(longitude)s,%(latitude)s)
                     )
                     ON CONFLICT (BFCID) DO UPDATE
                     SET
