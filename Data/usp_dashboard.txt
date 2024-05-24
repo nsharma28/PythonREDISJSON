@@ -1,3 +1,45 @@
+Table : tbluserlogin
+Index column : usertypeid, subusertypeid, userid
+
+Table : tbllookupvalues
+Index column :lookupvalueid
+
+Table : tblsubusertype
+Index column : subusertypeid
+
+Table : tblcustomermaster
+Index column :id
+
+Table : tblsalesreport
+Index column :customercodeid, invoicedate
+
+Table : tblabpterritoryreport
+Index column :salesdistrictid, startdate, enddate
+
+Table : tblsalesdistrictmaster
+Index column :id
+
+Table : tblcustomermaster
+Index column :id
+
+Table : tblcustomerdetail
+Index column :cid, salesdistrictid
+
+Table : tblsalesreport
+Index column :customercodeid,materialid,invoicedate
+
+Table : tblmaterialmaster
+Index column :id, materialgroup2
+
+Table : tblbrand
+Index column :materialgroup2
+
+Table : tblabpcustomerreport
+Index column :customerid, startdate, enddate
+
+
+
+
 -- FUNCTION: public.usp_dashboard(integer, integer, character varying, character varying, character varying, date, date)
 
 -- DROP FUNCTION IF EXISTS public.usp_dashboard(integer, integer, character varying, character varying, character varying, date, date);
