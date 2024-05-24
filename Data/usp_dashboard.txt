@@ -37,7 +37,45 @@ Index column :materialgroup2
 Table : tblabpcustomerreport
 Index column :customerid, startdate, enddate
 
+Table : tbldemovisiter
+Index column :inviteeid,demovisiterid,demovisitplanid
 
+Table : tbldemovisit
+Index column :demovisiterid
+
+Table : tbldemovisitplan
+Index column :demovisitplanid, visitdate
+
+Table : tblfarmermeetingvisiter
+Index column :visiterid, farmermeetingvisiterid,farmermeetingvisitplanid
+
+Table : tblfarmermeetingvisit
+Index column :farmermeetingvisiterid
+
+Table : tblfarmermeetingvisitplan
+Index column :farmermeetingvisitplanid,visitdate
+
+
+Table : tblfarmervisitplan
+Index column :visiterid,farmervisitplanid,visitdate, farmerid
+
+
+Table : tblfarmervisit
+Index column :farmervisitplanid
+
+
+Table : tblfarmer
+Index column :farmerid
+
+Table: tblcustomervisit
+Index column :customervisitplanid
+
+
+Table: tblretailervisit
+Index column :retailervisitplanid
+
+Table:tblretailervisitplan
+Index column :retailervisitplanid,visiterid
 
 
 -- FUNCTION: public.usp_dashboard(integer, integer, character varying, character varying, character varying, date, date)
