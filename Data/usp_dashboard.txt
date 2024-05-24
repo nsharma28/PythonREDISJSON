@@ -1,0 +1,1076 @@
+-- FUNCTION: public.usp_dashboard(integer, integer, character varying, character varying, character varying, date, date)
+
+-- DROP FUNCTION IF EXISTS public.usp_dashboard(integer, integer, character varying, character varying, character varying, date, date);
+
+CREATE OR REPLACE FUNCTION public.usp_dashboard(
+	p_mode integer DEFAULT 0,
+	p_userid integer DEFAULT 0,
+	p_type character varying DEFAULT ''::character varying,
+	p_period character varying DEFAULT ''::character varying,
+	p_user character varying DEFAULT ''::character varying,
+	p_fromdate date DEFAULT NULL::date,
+	p_todate date DEFAULT NULL::date)
+    RETURNS json
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+
+declare v_Result character varying;
+	declare v_ResultData json;
+	declare v_currentsales numeric(18,2) DEFAULT 0::numeric(18,2);
+	declare v_currenttarget numeric(18,2) DEFAULT 0::numeric(18,2);
+	declare v_prevsales numeric(18,2) DEFAULT 0::numeric(18,2);
+	declare v_prevtarget numeric(18,2) DEFAULT 0::numeric(18,2);
+	declare v_currentnrv numeric(18,2) DEFAULT 0::numeric(18,2);
+	declare v_prevnrv numeric(18,2) DEFAULT 0::numeric(18,2);
+	DECLARE _usertype character varying; _subusertype character varying; v_todate date; v_fromdate date;
+	declare v_demosdomtdachievement integer DEFAULT 0::integer; v_demosdomtdtarget integer DEFAULT 0::integer; v_demosdoytdachievement integer DEFAULT 0::integer; v_demosdoytdtarget integer DEFAULT 0::integer;
+	declare v_ofmsdomtdachievement integer DEFAULT 0::integer; v_ofmsdomtdtarget integer DEFAULT 0::integer; v_ofmsdoytdachievement integer DEFAULT 0::integer; v_ofmsdoytdtarget integer DEFAULT 0::integer;
+	declare v_ifmsdomtdachievement integer DEFAULT 0::integer; v_ifmsdomtdtarget integer DEFAULT 0::integer; v_ifmsdoytdachievement integer DEFAULT 0::integer; v_ifmsdoytdtarget integer DEFAULT 0::integer;
+	declare v_demotmmtdachievement integer DEFAULT 0::integer; v_demotmmtdtarget integer DEFAULT 0::integer; v_demotmytdachievement integer DEFAULT 0::integer; v_demotmytdtarget integer DEFAULT 0::integer;
+	declare v_ofmtmmtdachievement integer DEFAULT 0::integer; v_ofmtmmtdtarget integer DEFAULT 0::integer; v_ofmtmytdachievement integer DEFAULT 0::integer; v_ofmtmytdtarget integer DEFAULT 0::integer;
+	declare v_ifmtmmtdachievement integer DEFAULT 0::integer; v_ifmtmmtdtarget integer DEFAULT 0::integer; v_ifmtmytdachievement integer DEFAULT 0::integer; v_ifmtmytdtarget integer DEFAULT 0::integer;
+	declare v_customersdomtdachievement integer DEFAULT 0::integer;               --added by freya 18/03/2021	
+	declare v_customersdomtdtarget integer DEFAULT 0::integer;               --added by freya 18/03/2021
+	declare v_retailersdomtdachievement integer DEFAULT 0::integer;               --added by freya 18/03/2021
+	declare v_retailersdomtdtarget integer DEFAULT 0::integer;               --added by freya 18/03/2021	
+	declare _currentfyyear character varying; declare _prevfyyear character varying; --added by freya 03/04/2021
+	_startdate  date; _enddate  date; _prestartdate  date; _preenddate  date; _startdateyear  int;
+BEGIN
+	if(p_mode = 1) -- For mobile get dashboard graph data
+	THEN
+		/*
+			select * from usp_dashboard_harshil(p_mode:=1 ,p_userid:=258 )
+			select * from usp_dashboard(p_mode:=1 ,p_userid:=258 )
+		*/
+			Select startdate ,enddate,prestartdate,preenddate,date_part('year',startdate)
+			into 
+			_startdate,_enddate , _prestartdate,_preenddate,_startdateyear from getfinancialdate();
+		
+			select 
+			ut.lookupvalue as usertype
+			,sut.subusertype as subusertype
+			into
+			_usertype
+			,_subusertype
+			from tbluserlogin as ul
+			inner join tbllookupvalues as ut on ut.lookupvalueid = ul.usertypeid
+			inner join tblsubusertype as sut on sut.subusertypeid = ul.subusertypeid
+			where ul.userid = p_userid;
+
+			select	sum(presr.finaltaxablevalue) as presales
+			into v_prevsales
+			from getcustomerrights(p_userid) as gcr
+			inner join tblcustomermaster as cm on gcr.customerid = cm.id
+			left join tblsalesreport as presr on presr.customercodeid = cm.id
+			where 
+			presr.invoicedate between _prestartdate and  _preenddate;
+
+		IF(_subusertype = 'TM' or _subusertype = 'AM' or _subusertype = 'RSM' or _subusertype = 'GM' or _subusertype = 'ZM')
+		THEN
+				select 
+ 				sum(atr.nrvvalue)
+ 				into v_prevtarget
+ 				from tblabpterritoryreport as atr
+ 				inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 				where 
+ 				atr.startdate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate()) and
+ 				atr.enddate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate());
+
+				 select 
+ 				sum(atr.nrvvalue)
+ 				into v_currenttarget
+ 				from tblabpterritoryreport as atr
+ 				inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 				where 
+ 				atr.startdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and
+ 				atr.enddate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate());
+
+				
+
+				 select sum(COALESCE(t.currentsales,0)*COALESCE(t1.nrv,0)) 
+ 				into v_prevnrv
+ 				from (
+ 					select
+ 					sum(sr.qty) as currentsales
+ 					,brand.id
+ 					,cd.salesdistrictid
+ 					from getcustomerrights(p_userid) as gcr
+ 					inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 					inner join tblcustomerdetail as cd on cd.cid = cm.id
+ 					left join tblsalesreport as sr on sr.customercodeid = cm.id
+ 					inner join tblmaterialmaster ma on ma.id=sr.materialid
+ 					inner join tblbrand as brand on brand.materialgroup2 = ma.materialgroup2
+ 					where
+ 					sr.invoicedate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate())
+ 					group by brand.id,cd.salesdistrictid
+ 				) as t
+ 				left join (
+ 					select 
+ 						atr.nrv as nrv
+ 						,atr.materialid
+ 						,atr.salesdistrictid
+ 						from tblabpterritoryreport as atr
+ 						inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 						inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 						where 
+ 						atr.startdate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate()) and
+  						atr.enddate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate())
+ 						group by atr.nrv,atr.materialid,atr.salesdistrictid --added by pratik 02062023
+ 				) as t1 on t.id =t1.materialid and t1.salesdistrictid = t.salesdistrictid;
+
+				 select sum(COALESCE(t.currentsales,0)*COALESCE(t1.nrv,0)) 
+ 				into v_currentnrv
+ 				from (
+ 					select
+ 					sum(sr.qty) as currentsales
+ 					,brand.id
+ 					,cd.salesdistrictid
+ 					from getcustomerrights(p_userid) as gcr
+ 					inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 					inner join tblcustomerdetail as cd on cd.cid = cm.id
+ 					left join tblsalesreport as sr on sr.customercodeid = cm.id
+ 					inner join tblmaterialmaster ma on ma.id=sr.materialid
+ 					inner join tblbrand as brand on brand.materialgroup2 = ma.materialgroup2
+ 					where
+ 					sr.invoicedate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())
+ 					group by brand.id,cd.salesdistrictid
+ 				) as t
+ 				left join (
+ 					select 
+ 						atr.nrv as nrv
+ 						,atr.materialid
+ 						,atr.salesdistrictid
+ 						from tblabpterritoryreport as atr
+ 						inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 						inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 						where 
+ 						atr.startdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and
+ 						atr.enddate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())
+						group by atr.nrv,atr.materialid,atr.salesdistrictid --added by pratik 02062023
+ 				) as t1 on t.id =t1.materialid and t1.salesdistrictid = t.salesdistrictid;
+
+				
+		ELSEIF((_subusertype = 'SR' or _subusertype = 'SO' or _subusertype = 'SE') or  _usertype = 'Customer')
+		THEN
+				select 
+ 				sum(acr.nrvvalue)
+ 				into v_prevtarget
+ 				from getcustomerrights(p_userid) as gcr
+ 				inner join tblabpcustomerreport as acr on acr.customerid = gcr.customerid
+ 				inner join tblcustomerdetail as cd on cd.cid = acr.customerid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = cd.salesdistrictid
+ 				where 
+ 				acr.startdate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate()) and
+ 				acr.enddate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate());
+ 
+ 				select 
+ 				sum(acr.nrvvalue)
+ 				into v_currenttarget
+ 				from getcustomerrights(p_userid) as gcr
+ 				inner join tblabpcustomerreport as acr on acr.customerid = gcr.customerid
+ 				inner join tblcustomerdetail as cd on cd.cid = acr.customerid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = cd.salesdistrictid
+ 				where 
+ 				acr.startdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and
+ 				acr.enddate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate());
+ 
+ 				select 
+ 				sum(coalesce(acr.nrv,0) * coalesce(currentsales.qty,0)) 
+ 				into v_prevnrv
+ 				from getcustomerrights(p_userid) as gcr
+ 				inner join tblabpcustomerreport as acr on acr.customerid = gcr.customerid
+ 				inner join tblcustomerdetail as cd on cd.cid = acr.customerid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = cd.salesdistrictid
+ 				left join (select
+ 										sum(sr.qty) as qty
+ 										,cd.salesdistrictid
+ 										,sr.materialid
+ 										from getcustomerrights(p_userid) as gcr
+ 										inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 										inner join tblcustomerdetail as cd on cd.cid = cm.id
+ 										inner join tblsalesreport as sr on sr.customercodeid = cm.id
+ 										where 
+ 										sr.invoicedate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate())
+ 										group by cd.salesdistrictid, sr.materialid) as currentsales on currentsales.salesdistrictid = sdm.id and acr.materialid = currentsales.materialid
+ 				where acr.startdate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate()) and
+ 				acr.enddate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate());
+ 
+ 
+ 				select 
+ 				sum(coalesce(acr.nrv,0) * coalesce(currentsales.qty,0)) 
+ 				into v_currentnrv
+ 				from getcustomerrights(p_userid) as gcr
+ 				inner join tblabpcustomerreport as acr on acr.customerid = gcr.customerid
+ 				inner join tblcustomerdetail as cd on cd.cid = acr.customerid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = cd.salesdistrictid
+ 				left join (select
+ 										sum(sr.qty) as qty
+ 										,cd.salesdistrictid
+ 										,sr.materialid
+ 										from getcustomerrights(p_userid) as gcr
+ 										inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 										inner join tblcustomerdetail as cd on cd.cid = cm.id
+ 										inner join tblsalesreport as sr on sr.customercodeid = cm.id
+ 										where 
+ 										sr.invoicedate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())
+ 										group by cd.salesdistrictid, sr.materialid) as currentsales on currentsales.salesdistrictid = sdm.id and acr.materialid = currentsales.materialid
+ 				where acr.startdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and
+ 				acr.enddate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate());
+				
+		ELSE
+				 select 
+ 				sum(atr.nrvvalue)
+ 				into v_prevtarget
+ 				from tblabpterritoryreport as atr
+ 				inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 				where 
+ 				atr.startdate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate()) and
+ 				atr.enddate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate());
+ 
+ 
+ 				select 
+ 				sum(atr.nrvvalue)
+ 				into v_currenttarget
+ 				from tblabpterritoryreport as atr
+ 				inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 				inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 				where 
+ 				atr.startdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and
+ 				atr.enddate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate());
+ 
+ 				
+ 
+ 				select sum(COALESCE(t.currentsales,0)*COALESCE(t1.nrv,0)) 
+ 				into v_prevnrv
+ 				from (
+ 					select
+ 					sum(sr.qty) as currentsales
+ 					,brand.id
+ 					,cd.salesdistrictid
+ 					from getcustomerrights(p_userid) as gcr
+ 					inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 					inner join tblcustomerdetail as cd on cd.cid = cm.id
+ 					left join tblsalesreport as sr on sr.customercodeid = cm.id
+ 					inner join tblmaterialmaster ma on ma.id=sr.materialid
+ 					inner join tblbrand as brand on brand.materialgroup2 = ma.materialgroup2
+ 					where
+ 					sr.invoicedate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate())
+ 					group by brand.id,cd.salesdistrictid
+ 				) as t
+ 				left join (
+ 					select 
+ 						atr.nrv as nrv
+ 						,atr.materialid
+ 						,atr.salesdistrictid
+ 						from tblabpterritoryreport as atr
+ 						inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 						inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 						where 
+ 						atr.startdate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate()) and
+  						atr.enddate between (select prestartdate from getfinancialdate()) and  (select preenddate from getfinancialdate())
+ 						group by atr.nrv,atr.materialid,atr.salesdistrictid --added by pratik 02062023
+ 				) as t1 on t.id =t1.materialid and t1.salesdistrictid = t.salesdistrictid;
+ 
+ 				
+ 				select sum(COALESCE(t.currentsales,0)*COALESCE(t1.nrv,0)) 
+ 				into v_currentnrv
+ 				from (
+ 					select
+ 					sum(sr.qty) as currentsales
+ 					,brand.id
+ 					,cd.salesdistrictid
+ 					from getcustomerrights(p_userid) as gcr
+ 					inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 					inner join tblcustomerdetail as cd on cd.cid = cm.id
+ 					left join tblsalesreport as sr on sr.customercodeid = cm.id
+ 					inner join tblmaterialmaster ma on ma.id=sr.materialid
+ 					inner join tblbrand as brand on brand.materialgroup2 = ma.materialgroup2
+ 					where
+ 					sr.invoicedate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())
+ 					group by brand.id,cd.salesdistrictid
+ 				) as t
+ 				left join (
+ 					select 
+ 						atr.nrv as nrv
+ 						,atr.materialid
+ 						,atr.salesdistrictid
+ 						from tblabpterritoryreport as atr
+ 						inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = atr.salesdistrictid
+ 						inner join tblsalesdistrictmaster as sdm on sdm.id = guwt.territoryid
+ 						where 
+ 						atr.startdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and
+ 						atr.enddate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())
+						group by atr.nrv,atr.materialid,atr.salesdistrictid --added by pratik 02062023
+ 				) as t1 on t.id =t1.materialid and t1.salesdistrictid = t.salesdistrictid;
+		END IF;
+			
+
+			 select
+ 			sum(sr.finaltaxablevalue) as currentsales
+ 			into v_currentsales
+ 			from getcustomerrights(p_userid) as gcr
+ 			inner join tblcustomermaster as cm on gcr.customerid = cm.id
+ 			left join tblsalesreport as sr on sr.customercodeid = cm.id
+ 			where
+ 			sr.invoicedate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate());
+
+			
+			select 'FY ' || to_char(startdate,'yy') || ' ' || '- ' ||  to_char(enddate,'yy') from getfinancialdate()  into _currentfyyear;
+			select 'FY ' || to_char(prestartdate,'yy') || ' ' || '- ' || to_char(preenddate,'yy') from getfinancialdate() into _prevfyyear;
+			
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+		select COALESCE(v_prevsales,0)/10000000 as prevsales,
+		COALESCE(v_currentsales,0)/10000000 as currentsales,
+		COALESCE(v_currenttarget,0)/10000000 as currenttarget,
+		COALESCE(v_prevtarget,0)/10000000 as prevtarget,
+		COALESCE(v_prevnrv,0)/10000000 as prevnrv,
+		COALESCE(v_currentnrv,0)/10000000 as currentnrv,
+		_currentfyyear as currentfyyear,                    --added by freya 03/04/2021
+		_prevfyyear as prevfyyear,			--added by freya 03/04/2021
+		(SELECT row_to_json(kk) FROM ( 
+		select 
+			sum(outstanding1) as o030
+			,sum(outstanding2) as o3060
+			,sum(outstanding3) as o6090
+			,sum(outstanding4) as o90120
+			,sum(outstanding5) as o120150
+			,sum(outstanding6) as o150180
+			,sum(outstanding7) as o180210
+			,sum(outstanding8) as o210240
+			,sum(unadjustedcredit) as unadjustedcredit
+			,sum(allinclusiveamt) as allinclusiveamt
+			,sum(outstanding1d) as o030n
+			,sum(outstanding2d) as o3060n
+			,sum(outstanding3d) as o6090n
+			,sum(outstanding4d) as o90120n
+			,sum(outstanding5d) as o120150n
+			,sum(outstanding6d) as o150180n
+			,sum(outstanding7d) as o180210n
+			,sum(outstanding8d) as o210240n
+			from getcustomerrights(p_userid) as gcr
+			inner join tblagingreport as ar on ar.customercodeid = gcr.customerid
+		) as kk) as agingdata,
+		(SELECT row_to_json(kk) FROM ( 
+			select 
+			sum(CASE WHEN(to_char(docdate,'MM') = '04') THEN  amountinlc else 0 END)/10000000 as april
+			,sum(CASE WHEN(to_char(docdate,'MM') = '05') THEN  amountinlc else 0 END)/10000000 as may
+			,sum(CASE WHEN(to_char(docdate,'MM') = '06') THEN  amountinlc else 0 END)/10000000 as june
+			,sum(CASE WHEN(to_char(docdate,'MM') = '07') THEN  amountinlc else 0 END)/10000000 as july
+			,sum(CASE WHEN(to_char(docdate,'MM') = '08') THEN  amountinlc else 0 END)/10000000 as august
+			,sum(CASE WHEN(to_char(docdate,'MM') = '09') THEN  amountinlc else 0 END)/10000000 as september
+			,sum(CASE WHEN(to_char(docdate,'MM') = '10') THEN  amountinlc else 0 END)/10000000 as october
+			,sum(CASE WHEN(to_char(docdate,'MM') = '11') THEN  amountinlc else 0 END)/10000000 as november
+			,sum(CASE WHEN(to_char(docdate,'MM') = '12') THEN  amountinlc else 0 END)/10000000 as december
+			,sum(CASE WHEN(to_char(docdate,'MM') = '01') THEN  amountinlc else 0 END)/10000000 as january
+			,sum(CASE WHEN(to_char(docdate,'MM') = '02') THEN  amountinlc else 0 END)/10000000 as february
+			,sum(CASE WHEN(to_char(docdate,'MM') = '03') THEN  amountinlc else 0 END)/10000000 as march
+			,0 as tapril
+			,0 as tmay
+			,0 as tjune
+			,0 as tjuly
+			,0 as taugust
+			,0 as tseptember
+			,0 as toctober
+			,0 as tnovember
+			,0 as tdecember
+			,0 as tjanuary
+			,0 as tfebruary
+			,0 as tmarch
+			from getcustomerrights(p_userid) as gcr
+			inner join tblcollectionreport as cr on cr.customercodeid = gcr.customerid
+			where cr.fiscalyear = _startdateyear --(select to_char(startdate,'yyyy') from getfinancialdate())::integer
+		) as kk) as collectiondata,
+		(SELECT row_to_json(kk) FROM ( 
+			select COALESCE(april,0) as april,
+			COALESCE(may,0) as may,
+			COALESCE(june,0) as june,
+			COALESCE(july,0) as july,
+			COALESCE(august,0) as august,
+			COALESCE(september,0) as september,
+			COALESCE(october,0) as october,
+			COALESCE(november,0) as november,
+			COALESCE(december,0) as december,
+			COALESCE(january,0) as january,
+			COALESCE(february,0) as february,
+			COALESCE(march,0) as march,
+
+			COALESCE(rsp_april,0) as rsp_april,
+			COALESCE(rsp_may,0) as rsp_may,
+			COALESCE(rsp_june,0) as rsp_june,
+			COALESCE(rsp_july,0) as rsp_july,
+			COALESCE(rsp_august,0) as rsp_august,
+			COALESCE(rsp_september,0) as rsp_september,
+			COALESCE(rsp_october,0) as rsp_october,
+			COALESCE(rsp_november,0) as rsp_november,
+			COALESCE(rsp_december,0) as rsp_december,
+			COALESCE(rsp_january,0) as rsp_january,
+			COALESCE(rsp_february,0) as rsp_february,
+			COALESCE(rsp_march,0) as rsp_march
+			from (
+			select
+						sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '04') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as april
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '05') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as may
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '06') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as june
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '07') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as july
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '08') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as august
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '09') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as september
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '10') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as october
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '11') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as november
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '12') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as december
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '01') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as january
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '02') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as february
+						,sum(CASE WHEN(to_char(sr.invoicedate,'MM') = '03') THEN  COALESCE(sr.finaltaxablevalue,0) else 0 END)/10000000 as march
+						from getcustomerrights(p_userid) as gcr
+						inner join tblcustomermaster as cm on gcr.customerid = cm.id
+						left join tblsalesreport as sr on sr.customercodeid = cm.id
+				where sr.invoicedate between _startdate and  _enddate
+			) as t		
+			cross join (
+			select 
+			sum(CASE WHEN(to_char(rspt.startdate,'MM') = '04') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_april
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '05') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_may
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '06') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_june
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '07') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000as rsp_july
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '08') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_august
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '09') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_september
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '10') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_october
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '11') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_november
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '12') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_december
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '01') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_january
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '02') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_february
+						,sum(CASE WHEN(to_char(rspt.startdate,'MM') = '03') THEN  COALESCE(rspt.nrvvalue,0) else 0 END)/10000000 as rsp_march
+			from tblrspterritoryreport as rspt
+			inner join getuserwiseterritory(p_userid) as guwt on guwt.territoryid = rspt.salesdistrictid
+			where rspt.startdate between _startdate and  _enddate
+			) as t1
+		) as kk) as rspdata
+		) as kk;
+
+		
+		
+		RETURN v_ResultData;
+	elseif(p_mode = 2) -- For mobile get dashboard SDO attendance
+	THEN
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select count(1) as total
+			,COALESCE(sum(CASE WHEN(starttime is not null and endtime is null) THEN 1 else 0 end),0) as daystart
+			,COALESCE(sum(CASE WHEN(starttime is not null and endtime is not null) THEN 1 else 0 end),0) as dayend
+			,COALESCE(sum(CASE WHEN(starttime is null and endtime is null) THEN 1 else 0 end),0) as absent
+			from (
+			select row_number() over(partition by ul.userid order by md.mydayid desc) as no ,md.starttime,md.endtime
+			from tbluserlogin as ul
+			left join tblmyday as md on md.createdby = ul.userid and md.starttime::date = now()::date
+			where ul.userid in (select userid from getsdouser(p_userid))  and ul.isinactive = false
+			) as t1 where t1.no=1
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 3) -- For mobile get dashboard SDO attendance
+	THEN
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_todate;
+		--SELECT date_trunc('month', CURRENT_DATE) + interval '1 month - 1 day' into v_fromdate;
+		SELECT now()::date into v_fromdate;
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			-- select 
+-- 			ul.displayname as username
+-- 			,COALESCE(to_char(ul.createddate,'HH24:MI'),'') as starttime
+-- 			,COALESCE(to_char(ul.modifieddate,'HH24:MI'),'') as endtime
+-- 			,26 as present
+-- 			,1 as absent
+-- 			,4 as holiday
+-- 			,31 as total
+-- 			from tbluserlogin as ul
+-- 			inner join tbllookupvalues as ut on ut.lookupvalueid = ul.usertypeid
+-- 			where ut.lookupvalue = 'SDO/MDO'
+			select username,starttime,endtime,present,absent,holidays,total
+			,zonelist,subregionlist,salesdistrictlist,zoneidlist,subregionidlist,salesdistrictidlist  from (
+			select 
+			row_number() over(partition by t2.userid order by md2.mydayid desc) as no
+			,t2.username
+			,COALESCE(to_char(md2.starttime,'HH24:MI'),'') as starttime
+			,COALESCE(to_char(md2.endtime,'HH24:MI'),'') as endtime
+			,t2.workingdays as present
+			,t2.noactivitie as absent
+			,t2.holidays as holidays
+			,t2.noofdays as total
+				,vwzssd.zonelist
+						,vwzssd.subregionlist
+						,vwzssd.salesdistrictlist
+				,vwzssd.zoneidlist
+						,vwzssd.subregionidlist
+						,vwzssd.salesdistrictidlist
+			 from (
+			select 
+			userid,
+			displayname as username,
+			row_number() over(partition by userid ) as no,
+			sum(1) over(partition by userid) as noofdays,
+			sum(CASE WHEN(mydayid is null) then 0 else 1 end) over(partition by userid) as workingdays,
+			sum(CASE WHEN(leaveid is not null and mydayid is null and dayno != 0) then 1 else 0 end) over(partition by userid) as leavedays,
+			sum(CASE WHEN(dayno = 0 and mydayid is null) then 1 else 0 end) over(partition by userid) as holidays,
+			sum(CASE WHEN(mydayid is null and leaveid is null and dayno != 0) then 1 else 0 end) over(partition by userid) as noactivitie
+			from (
+			SELECT
+			row_number() over(partition by ul.userid,s::date order by md.mydayid desc) as no,
+			ul.userid,
+			ul.displayname,
+			s::date,
+			extract(DOW from s) as dayno,
+			md.mydayid,
+			leave.leaveid
+			FROM ((select ul.* from tbluserlogin as ul where  ul.userid in (select userid from getsdouser(p_userid)) and ul.isinactive = false) as ul cross join generate_series(v_todate, v_fromdate, '1 day'::interval) s)
+			left join tblmyday as md on md.starttime::date = s::date and ul.userid = md.createdby
+			left join (select generate_series(fromdate, todate, '1 day'::interval) leavedate,leaveid ,fromdate,todate,userid from tblleave ) as leave on leave.leavedate = s::date and leave.userid = ul.userid
+			order by s::date asc
+			) as t where t.no =1
+			) as t2
+			left join tblmyday as md2 on md2.createdby = t2.userid and md2.starttime::date = now()::date
+				left join vwzonesubregionsalesdistrict as vwzssd on vwzssd.userid = t2.userid
+			 where t2.no=1 
+			 ) as t3 where t3.no =1 order by username
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 4) -- For mobile get dashboard SDO activity
+	THEN
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_fromdate;
+		SELECT date_trunc('month', CURRENT_DATE) + interval '1 month - 1 day' into v_todate;
+		-----------------------------------------------------SDO -------------------------------------------------------------------
+		/* select
+ 		count(1)
+ 		into v_demosdomtdachievement
+ 		from tbldemovisit as dv
+ 		inner join tbldemovisiter as dvi on dvi.demovisiterid = dv.demovisiterid
+ 		inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid
+ 		where dvp.visitdate between v_fromdate and v_todate  and dvi.inviteeid in (select userid from getsdouser(p_userid));
+
+ 		select
+ 		count(1)
+ 		into v_demosdoytdachievement
+ 		from tbldemovisit as dv
+ 		inner join tbldemovisiter as dvi on dvi.demovisiterid = dv.demovisiterid
+ 		inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid
+ 		where dvp.visitdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())  and dvi.inviteeid in (select userid from getsdouser(p_userid));
+
+ 		select
+ 		count(1)
+ 		into v_ofmsdomtdachievement
+ 		from tblfarmermeetingvisit as fmv
+ 		inner join tblfarmermeetingvisiter as fmvi on fmvi.farmermeetingvisiterid = fmv.farmermeetingvisiterid
+ 		inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid
+ 		where fmvp.visitdate between v_fromdate and v_todate and fmvi.visiterid in (select userid from getsdouser(p_userid));
+
+ 		select
+ 		count(1)
+ 		into v_ofmsdoytdachievement
+ 		from tblfarmermeetingvisit as fmv
+ 		inner join tblfarmermeetingvisiter as fmvi on fmvi.farmermeetingvisiterid = fmv.farmermeetingvisiterid
+ 		inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid
+ 		where fmvp.visitdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and fmvi.visiterid in (select userid from getsdouser(p_userid));
+
+ 		select
+ 		count(1)
+ 		into v_ifmsdomtdachievement
+ 		from tblfarmervisit as fv
+ 		inner join tblfarmervisitplan as fvp on fvp.farmervisitplanid = fv.farmervisitplanid
+ 		where fvp.visitdate between v_fromdate and v_todate and fvp.visiterid in (select userid from getsdouser(p_userid));
+
+ 		select
+ 		count(1)
+ 		into v_ifmsdoytdachievement
+ 		from tblfarmervisit as fv
+ 		inner join tblfarmervisitplan as fvp on fvp.farmervisitplanid = fv.farmervisitplanid
+ 		where fvp.visitdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and fvp.visiterid in (select userid from getsdouser(p_userid));
+
+ 		------------------------------------------------------------------TM-----------------------------------------------------------------------------
+
+ 		select
+ 		count(1)
+ 		into v_demotmmtdachievement
+ 		from tbldemovisit as dv
+ 		inner join tbldemovisiter as dvi on dvi.demovisiterid = dv.demovisiterid
+ 		inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid
+ 		where dvp.visitdate between v_fromdate and v_todate  and dvi.inviteeid = p_userid;
+
+ 		select
+ 		count(1)
+ 		into v_demotmytdachievement
+ 		from tbldemovisit as dv
+ 		inner join tbldemovisiter as dvi on dvi.demovisiterid = dv.demovisiterid
+ 		inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid
+ 		where dvp.visitdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate())  and dvi.inviteeid = p_userid;
+
+ 		select
+ 		count(1)
+ 		into v_ofmtmmtdachievement
+ 		from tblfarmermeetingvisit as fmv
+ 		inner join tblfarmermeetingvisiter as fmvi on fmvi.farmermeetingvisiterid = fmv.farmermeetingvisiterid
+ 		inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid
+ 		where fmvp.visitdate between v_fromdate and v_todate and fmvi.visiterid = p_userid;
+
+ 		select
+ 		count(1)
+ 		into v_ofmtmytdachievement
+ 		from tblfarmermeetingvisit as fmv
+ 		inner join tblfarmermeetingvisiter as fmvi on fmvi.farmermeetingvisiterid = fmv.farmermeetingvisiterid
+ 		inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid
+ 		where fmvp.visitdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and fmvi.visiterid = p_userid;
+
+ 		select
+ 		count(1)
+ 		into v_ifmtmmtdachievement
+ 		from tblfarmervisit as fv
+ 		inner join tblfarmervisitplan as fvp on fvp.farmervisitplanid = fv.farmervisitplanid
+ 		where fvp.visitdate between v_fromdate and v_todate and fvp.visiterid = p_userid;
+
+ 		select
+ 		count(1)
+ 		into v_ifmtmytdachievement
+ 		from tblfarmervisit as fv
+ 		inner join tblfarmervisitplan as fvp on fvp.farmervisitplanid = fv.farmervisitplanid
+ 		where fvp.visitdate between (select startdate from getfinancialdate()) and  (select enddate from getfinancialdate()) and fvp.visiterid = p_userid;
+*/
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			v_demosdomtdachievement as demosdomtdachievement
+			,v_demosdomtdtarget as demosdomtdtarget
+			,v_demosdoytdachievement as demosdoytdachievement
+			,v_demosdoytdtarget as demosdoytdtarget
+			,v_ofmsdomtdachievement as ofmsdomtdachievement
+			,v_ofmsdomtdtarget as ofmsdomtdtarget
+			,v_ofmsdoytdachievement as ofmsdoytdachievement
+			,v_ofmsdoytdtarget as ofmsdoytdtarget
+			,v_ifmsdomtdachievement as ifmsdomtdachievement
+			,v_ifmsdomtdtarget as ifmsdomtdtarget
+			,v_ifmsdoytdachievement as ifmsdoytdachievement
+			,v_ifmsdoytdtarget as ifmsdoytdtarget
+
+			,v_demotmmtdachievement as demotmmtdachievement
+			,v_demotmmtdtarget as demotmmtdtarget
+			,v_demotmytdachievement as demotmytdachievement
+			,v_demotmytdtarget as demotmytdtarget
+			,v_ofmtmmtdachievement as ofmtmmtdachievement
+			,v_ofmtmmtdtarget as ofmtmmtdtarget
+			,v_ofmtmytdachievement as ofmtmytdachievement
+			,v_ofmtmytdtarget as ofmtmytdtarget
+			,v_ifmtmmtdachievement as ifmtmmtdachievement
+			,v_ifmtmmtdtarget as ifmtmmtdtarget
+			,v_ifmtmytdachievement as ifmtmytdachievement
+			,v_ifmtmytdtarget as ifmtmytdtarget
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 5) -- For mobile get dashboard SDO activity detail
+	THEN
+	
+		Select startdate ,enddate,prestartdate,preenddate,date_part('year',startdate)
+		into 
+		_startdate,_enddate , _prestartdate,_preenddate,_startdateyear from getfinancialdate();
+		
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_fromdate;
+		SELECT now()::date into v_todate;
+		IF(p_type = 'Demo' and p_period = 'MTD' and p_user = 'SDO')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(dv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tbldemovisiter as dvi on dvi.inviteeid = ul.userid
+			inner join tbldemovisit as dv on dv.demovisiterid = dvi.demovisiterid
+			inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid 
+			where ul.userid in (select userid from getsdouser(p_userid)) and dvp.visitdate between v_fromdate and v_todate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'Demo' and p_period = 'YTD' and p_user = 'SDO')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(dv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tbldemovisiter as dvi on dvi.inviteeid = ul.userid
+			inner join tbldemovisit as dv on dv.demovisiterid = dvi.demovisiterid
+			inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid 
+			where ul.userid in (select userid from getsdouser(p_userid)) and dvp.visitdate between _startdate and  _enddate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'Demo' and p_period = 'MTD' and p_user = 'TM')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(dv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tbldemovisiter as dvi on dvi.inviteeid = ul.userid
+			inner join tbldemovisit as dv on dv.demovisiterid = dvi.demovisiterid
+			inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid 
+			where ul.userid = p_userid and dvp.visitdate between v_fromdate and v_todate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'Demo' and p_period = 'YTD' and p_user = 'TM')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(dv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tbldemovisiter as dvi on dvi.inviteeid = ul.userid
+			inner join tbldemovisit as dv on dv.demovisiterid = dvi.demovisiterid
+			inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dvi.demovisitplanid 
+			where ul.userid = p_userid and dvp.visitdate between _startdate and  _enddate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'OFM' and p_period = 'MTD' and p_user = 'SDO')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(fmv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tblfarmermeetingvisiter as fmvi on fmvi.visiterid = ul.userid
+			inner join tblfarmermeetingvisit as fmv on fmv.farmermeetingvisiterid = fmvi.farmermeetingvisiterid
+			inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid 
+			where ul.userid in (select userid from getsdouser(p_userid)) and fmvp.visitdate between v_fromdate and v_todate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'OFM' and p_period = 'YTD' and p_user = 'SDO')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(fmv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tblfarmermeetingvisiter as fmvi on fmvi.visiterid = ul.userid
+			inner join tblfarmermeetingvisit as fmv on fmv.farmermeetingvisiterid = fmvi.farmermeetingvisiterid
+			inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid 
+			where ul.userid in (select userid from getsdouser(p_userid)) and fmvp.visitdate between _startdate and  _enddate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'OFM' and p_period = 'MTD' and p_user = 'TM')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(fmv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tblfarmermeetingvisiter as fmvi on fmvi.visiterid = ul.userid
+			inner join tblfarmermeetingvisit as fmv on fmv.farmermeetingvisiterid = fmvi.farmermeetingvisiterid
+			inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid 
+			where ul.userid = p_userid and fmvp.visitdate between v_fromdate and v_todate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'OFM' and p_period = 'YTD' and p_user = 'TM')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			ul.displayname as username
+			,ul.userid
+			,sum(CASE WHEN(fmv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+			,0 as target
+			from tbluserlogin as ul
+			inner join tblfarmermeetingvisiter as fmvi on fmvi.visiterid = ul.userid
+			inner join tblfarmermeetingvisit as fmv on fmv.farmermeetingvisiterid = fmvi.farmermeetingvisiterid
+			inner join tblfarmermeetingvisitplan as fmvp on fmvp.farmermeetingvisitplanid = fmvi.farmermeetingvisitplanid 
+			where ul.userid = p_userid and fmvp.visitdate between _startdate and  _enddate
+			group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'IFM' and p_period = 'MTD' and p_user = 'SDO')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+				select 
+				ul.displayname as username
+				,ul.userid
+				,sum(CASE WHEN(fv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+				,0 as target
+				from tbluserlogin as ul
+				inner join tblfarmervisitplan as fvp on fvp.visiterid = ul.userid 
+				inner join tblfarmervisit as fv on fv.farmervisitplanid = fvp.farmervisitplanid
+				where  ul.userid in (select userid from getsdouser(p_userid)) and fvp.visitdate between v_fromdate and v_todate
+				group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'IFM' and p_period = 'YTD' and p_user = 'SDO')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+				ul.displayname as username
+				,ul.userid
+				,sum(CASE WHEN(fv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+				,0 as target
+				from tbluserlogin as ul
+				inner join tblfarmervisitplan as fvp on fvp.visiterid = ul.userid 
+				inner join tblfarmervisit as fv on fv.farmervisitplanid = fvp.farmervisitplanid
+				where  ul.userid in (select userid from getsdouser(p_userid)) and fvp.visitdate between _startdate and  _enddate
+				group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'IFM' and p_period = 'MTD' and p_user = 'TM')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+				ul.displayname as username
+				,ul.userid
+				,sum(CASE WHEN(fv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+				,0 as target
+				from tbluserlogin as ul
+				inner join tblfarmervisitplan as fvp on fvp.visiterid = ul.userid 
+				inner join tblfarmervisit as fv on fv.farmervisitplanid = fvp.farmervisitplanid
+				where  ul.userid = p_userid and fvp.visitdate between v_fromdate and v_todate
+				group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		elseif(p_type = 'IFM' and p_period = 'YTD' and p_user = 'TM')
+		THEN
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+				select 
+				ul.displayname as username
+				,ul.userid
+				,sum(CASE WHEN(fv.checkintime is not null) THEN 1 ELSE 0 END) as achievement
+				,0 as target
+				from tbluserlogin as ul
+				inner join tblfarmervisitplan as fvp on fvp.visiterid = ul.userid 
+				inner join tblfarmervisit as fv on fv.farmervisitplanid = fvp.farmervisitplanid
+				where  ul.userid = p_userid and fvp.visitdate between _startdate and  _enddate
+				group by ul.displayname,ul.userid order by ul.displayname asc
+			) as kk;
+			RETURN v_ResultData;
+		end if;	
+	elseif(p_mode = 6) -- For mobile get user wise demo activity
+	THEN
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_fromdate;
+		SELECT now()::date into v_todate;
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			dvp.demovisitplanid
+			,dmi.inviteeid
+			,dvp.visitdate
+			,ul.displayname
+			,dvp.demono
+			,brand.description as primaryproduct
+			,farmer.city
+			,crop.name as crop
+			,purpo.purpose as purpose
+			,t3.invitee
+			,COALESCE(f1.followupdate,dvp.followupdate) as followupdate --dmv.followupdate
+			,COALESCE(fdvp.fielddate,dvp.fielddate) as fielddate--dmv.fielddate
+			,CASE WHEN(f1.checkouttime is null) THEN 'Demo' WHEN(f1.checkouttime is not null and fuv.checkouttime is null and fdv.checkouttime is null) THEN 'Followup' WHEN(fuv.checkouttime is not null and fdv.checkouttime is null) THEN 'SecondFollowUp' WHEN(f1.checkouttime is not null and fdv.checkouttime is not null) THEN 'FieldDay' END as status
+			,f1.checkouttime 
+			,COALESCE(f1.issuccessful,false) as issuccessful
+			,COALESCE(f1.isdemocontinue,false) as isdemocontinue
+			,f2.followupvisitplanid as secondfollowupvisitplanid
+			,f2.followupdate as secondfollowupdate
+			,COALESCE(f2.issuccessful,false) as issecondsuccessful
+			from tbldemovisitplan as dvp
+			inner join tbldemovisiter as dmi on dmi.demovisitplanid = dvp.demovisitplanid
+			inner join tbluserlogin as ul on ul.userid = dmi.inviteeid
+			inner join tbldemovisit as dmv on dmv.demovisiterid = dmi.demovisiterid
+			left join tblfarmer as farmer on farmer.mobileno = dvp.mobilenumber
+			left join tblcrop as crop on crop.cropid = dvp.cropid
+			left join tblbrand as brand on brand.id = dvp.primaryproductid
+			left join (select 
+			row_number() over(partition by demovisitplanid) as no,
+			demovisitplanid,
+			string_agg(tbluserlogin.displayname,', ') over(partition by demovisitplanid) as invitee
+			from tbldemovisiter 
+			inner join tbluserlogin on tbluserlogin.userid = tbldemovisiter.inviteeid
+			) as t3 on t3.no = 1 and t3.demovisitplanid = dvp.demovisitplanid
+			left join (select 
+			row_number() over(partition by dmd.demovisitplanid,dmd.keyname) as no,
+			demovisitplanid,
+			string_agg(pup.purpose,', ') over(partition by demovisitplanid) as purpose
+			from tbldemomultidata as dmd
+			inner join tblpurpose as pup on  pup.purposeid = dmd.keyid 
+			where dmd.keyname = 'purpose') as purpo on purpo.no = 1 and purpo.demovisitplanid = dvp.demovisitplanid
+			-- left join tblfollowupvisit as fuv on fuv.demovisiterid = dmi.demovisiterid
+-- 			left join tblfollowupvisitdetail as fuvd on fuvd.followupvisitid = fuv.followupvisitid
+			left join (tblfollowupvisitplan as fupvp 
+			left join tblfollowupvisit as fuv on fuv.followupvisitplanid = fupvp.followupvisitplanid
+			left join tblfollowupvisitdetail as fuvd on fuvd.followupvisitid = fuv.followupvisitid) as f1 on f1.demovisitplanid = dvp.demovisitplanid and f1.issecondfollowup = false and f1.demovisiterid = dmi.demovisiterid
+			left join (select fupvp.followupvisitplanid,fupvp.demovisitplanid, fupvp.issecondfollowup, fupvp.followupdate, fuvd.issuccessful  from tblfollowupvisitplan as fupvp 
+			left join tblfollowupvisitdetail as fuvd on fuvd.followupvisitplanid = fupvp.followupvisitplanid
+			) as f2 on f2.demovisitplanid = f1.demovisitplanid and f2.issecondfollowup = true 
+			left join tblfollowupvisit as fuv on fuv.followupvisitplanid = f2.followupvisitplanid and fuv.demovisiterid = dmi.demovisiterid
+			left join tblfielddayvisitplan as fdvp on fdvp.demovisitplanid = dmi.demovisitplanid
+			left join tblfielddayvisit as fdv on fdv.demovisiterid = dmi.demovisiterid
+			where dmi.inviteeid = p_userid and dvp.visitdate between COALESCE(p_fromdate,v_fromdate) and COALESCE(p_todate,v_todate)
+			order by dvp.visitdate desc
+
+			
+
+			
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 7) -- For mobile get user wise demo activity
+	THEN
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_fromdate;
+		SELECT now()::date into v_todate;
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			fmvp.farmermeetingvisitplanid
+			,fmvi.visiterid
+			,fmvp.location
+			,ul.displayname as username
+			,fmvp.visitdate
+			,fmv.nooffarmer
+			,product.product
+			,crop.crop
+			,stage.stage
+			,t3.invitee
+			from tblfarmermeetingvisitplan as fmvp
+			inner join tblfarmermeetingvisiter as fmvi on fmvi.farmermeetingvisitplanid = fmvp.farmermeetingvisitplanid
+			inner join tbluserlogin as ul on ul.userid = fmvi.visiterid
+			inner join tblfarmermeetingvisit as fmv on fmv.farmermeetingvisiterid = fmvi.farmermeetingvisiterid
+			left join (select 
+						row_number() over(partition by fmmd.farmermeetingvisitid,fmmd.keyname) as no,
+						farmermeetingvisitid,
+						string_agg(brand.description,', ') over(partition by fmmd.farmermeetingvisitid) as product
+						from tblfarmermeetingmultidata as fmmd
+						inner join tblbrand as brand on  brand.id = fmmd.keyid 
+						where fmmd.keyname = 'product') as product on product.no = 1 and product.farmermeetingvisitid = fmv.farmermeetingvisitid
+			left join (select 
+						row_number() over(partition by fmmd.farmermeetingvisitid,fmmd.keyname) as no,
+						farmermeetingvisitid,
+						string_agg(crop.name,', ') over(partition by fmmd.farmermeetingvisitid) as crop
+						from tblfarmermeetingmultidata as fmmd
+						inner join tblcrop as crop on  crop.cropid = fmmd.keyid 
+						where fmmd.keyname = 'crop') as crop on crop.no = 1 and crop.farmermeetingvisitid = fmv.farmermeetingvisitid
+			left join (select 
+						row_number() over(partition by fmmd.farmermeetingvisitid,fmmd.keyname) as no,
+						farmermeetingvisitid,
+						string_agg(stage.name,', ') over(partition by fmmd.farmermeetingvisitid) as stage
+						from tblfarmermeetingmultidata as fmmd
+						inner join tblstage as stage on  stage.stageid = fmmd.keyid 
+						where fmmd.keyname = 'stage') as stage on stage.no = 1 and stage.farmermeetingvisitid = fmv.farmermeetingvisitid
+			left join (select 
+						row_number() over(partition by farmermeetingvisitplanid) as no,
+						farmermeetingvisitplanid,
+						string_agg(tbluserlogin.displayname,', ') over(partition by farmermeetingvisitplanid) as invitee
+						from tblfarmermeetingvisiter 
+						inner join tbluserlogin on tbluserlogin.userid = tblfarmermeetingvisiter.visiterid
+						where visiterid != p_userid) as t3 on t3.no = 1 and t3.farmermeetingvisitplanid = fmvp.farmermeetingvisitplanid
+			where fmvi.visiterid = p_userid and fmvp.visitdate between COALESCE(p_fromdate,v_fromdate) and COALESCE(p_todate,v_todate)
+			order by fmvp.visitdate desc
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 8) -- For mobile get user wise demo activity
+	THEN
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_fromdate;
+		SELECT now()::date into v_todate;
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			fvp.farmervisitplanid
+			,fv.farmervisitid
+			,ul.displayname as username
+			,fvp.visitdate
+			,f.name
+			,f.city
+			,brand.description as product
+			,crop.crop
+			,stage.stage
+			,pest.pest
+			from tblfarmervisitplan as fvp
+			inner join tbluserlogin as ul on ul.userid = fvp.visiterid
+			inner join tblfarmer as f on f.farmerid = fvp.farmerid
+			inner join tblfarmervisit fv on fv.farmervisitplanid = fvp.farmervisitplanid
+			left join tblbrand as brand on brand.id = fv.targetproductid
+			left join (select 
+				row_number() over(partition by fp.farmervisitplanid,fp.key) as no,
+				farmervisitplanid,
+				string_agg(crop.name,', ') over(partition by fp.farmervisitplanid) as crop
+				from tblfarmerplant as fp
+				inner join tblcrop as crop on  crop.cropid = fp.keyid 
+				where fp.key = 'crop' limit 1) as crop on crop.no = 1 and crop.farmervisitplanid = fvp.farmervisitplanid
+			left join (select 
+				row_number() over(partition by fp.farmervisitplanid,fp.key) as no,
+				farmervisitplanid,
+				string_agg(stage.name,', ') over(partition by fp.farmervisitplanid) as stage
+				from tblfarmerplant as fp
+				inner join tblstage as stage on  stage.stageid = fp.keyid 
+				where fp.key = 'stage' limit 1) as stage on stage.no = 1 and stage.farmervisitplanid = fvp.farmervisitplanid
+			left join (select 
+				row_number() over(partition by fp.farmervisitplanid,fp.key) as no,
+				farmervisitplanid,
+				string_agg(pest.name,', ') over(partition by fp.farmervisitplanid) as pest
+				from tblfarmerplant as fp
+				inner join tblpest as pest on  pest.pestid = fp.keyid 
+				where fp.key = 'pest' limit 1) as pest on pest.no = 1 and pest.farmervisitplanid = fvp.farmervisitplanid
+			where visiterid = p_userid and fvp.visitdate between COALESCE(p_fromdate,v_fromdate) and COALESCE(p_todate,v_todate)
+			order by fvp.visitdate desc
+		) as kk;
+		RETURN v_ResultData;
+		--added by freya 18/03/2021
+		--select usp_dashboard(p_mode:=9,p_userid:= 401)
+	elseif(p_mode = 9) -- For mobile get dashboard SDO activity
+	THEN
+		SELECT date_trunc('month', CURRENT_DATE)::date into v_fromdate;
+		SELECT date_trunc('month', CURRENT_DATE) + interval '1 month - 1 day' into v_todate;
+		select st.subusertype into _subusertype from tbluserlogin ul inner join tblsubusertype as st on st.subusertypeid = ul.subusertypeid where ul.userid = p_userid; 
+		
+		select 
+		count(1)
+		into v_customersdomtdachievement
+		from tblcustomervisit as cv
+		inner join tblcustomervisitplan as cvp on cvp.customervisitplanid = cv.customervisitplanid
+		where cvp.visitdate between v_fromdate and v_todate  and cvp.visiterid =p_userid;
+
+		select 
+		count(1) 
+		into v_ifmsdomtdachievement
+		from tblfarmervisit as fv
+		inner join tblfarmervisitplan as fvp on fvp.farmervisitplanid = fv.farmervisitplanid
+		where fvp.visitdate between v_fromdate and v_todate and fvp.visiterid = p_userid;
+
+		select 
+		count(1)
+		into v_retailersdomtdachievement
+		from tblretailervisit as rv
+		inner join tblretailervisitplan as rvp on rvp.retailervisitplanid = rv.retailervisitplanid
+		where rvp.visitdate between v_fromdate and v_todate  and rvp.visiterid =p_userid;
+		
+		select case when(_subusertype = 'SO' or _subusertype = 'SR' or _subusertype = 'TM' or _subusertype = 'SE') then 75 
+			when(_subusertype = 'AM' or _subusertype = 'RM') then 50
+			else 0 into v_customersdomtdtarget end;
+
+			
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM ( 
+			select 
+			v_customersdomtdachievement + v_ifmsdomtdachievement as customerifmsdomtdachievement,
+			v_customersdomtdtarget as customerifmsdomtdtarget,
+			v_retailersdomtdachievement as retailersdomtdachievement,
+			v_retailersdomtdtarget as retailersdomtdtarget
+			
+			
+					) as kk;
+		RETURN v_ResultData;
+		--end by freya 18/03/2021
+	END IF;
+END;
+$BODY$;
+
+ALTER FUNCTION public.usp_dashboard(integer, integer, character varying, character varying, character varying, date, date)
+    OWNER TO postgres;
