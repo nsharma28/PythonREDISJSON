@@ -1,0 +1,602 @@
+-- FUNCTION: public.usp_claimapprovalcrud(integer, integer, date, date, integer, integer, character varying, integer, integer, text, character varying, character varying, json)
+
+-- DROP FUNCTION IF EXISTS public.usp_claimapprovalcrud(integer, integer, date, date, integer, integer, character varying, integer, integer, text, character varying, character varying, json);
+
+CREATE OR REPLACE FUNCTION public.usp_claimapprovalcrud(
+	p_mode integer DEFAULT 0,
+	p_userid integer DEFAULT 0,
+	p_startdate date DEFAULT NULL::date,
+	p_enddate date DEFAULT NULL::date,
+	p_mydayid integer DEFAULT NULL::integer,
+	p_incidentalexpenseid integer DEFAULT NULL::integer,
+	p_status character varying DEFAULT NULL::character varying,
+	p_skip integer DEFAULT 0,
+	p_pagecount integer DEFAULT 20,
+	p_orderby text DEFAULT '1'::text,
+	p_otherfilter character varying DEFAULT '1 = 1'::character varying,
+	p_rejectreason character varying DEFAULT NULL::character varying,
+	p_json json DEFAULT NULL::json)
+    RETURNS json
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+AS $BODY$
+
+	declare v_Result character varying;
+	declare v_ResultData json;
+	DECLARE _usertype character varying; _subusertype character varying;_salescode character varying;_employeecode character varying;
+	DECLARE v_mydaycount integer DEFAULT 0::integer;v_incidentalexpensecount integer DEFAULT 0::integer;
+BEGIN
+	if(p_mode = 1) -- For mobile get claim approval count
+	THEN
+			select count(1) as count into v_mydaycount
+			from tblmyday 
+			where statusid =6 and createdby in (select id from getchilduserlist(p_userid));                   --changed by freya 04/03/2021
+
+			select count(1) as count into v_incidentalexpensecount
+			from tblincidentalexpense as iex
+			where iex.statusid =6 and iex.createdby in (select id from getchilduserlist(p_userid));            --changed by freya 04/03/2021
+			SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+				select v_mydaycount + v_incidentalexpensecount as count
+			 ) as kk;
+		
+		RETURN v_ResultData;
+	elseif(p_mode = 2) -- For Mobile Get rsm claim approval list
+	THEN
+	
+		--start added by pratik task id - 3710
+		create temporary table tmptbltravelingodophoto(
+			mydayid integer,
+			openingpicture character varying,
+			closingpicture character varying
+		);
+		
+		insert into tmptbltravelingodophoto(openingpicture,closingpicture,mydayid)
+		select 
+		string_agg('ODO Meter Attachment/'||openingpicture,',') as openingpicture,
+		string_agg('ODO Meter Attachment/'||closingpicture,',') as closingpicture,
+		md.mydayid
+		from tblmyday as md
+		inner join tblmydaytravelingmode  as mdtm on mdtm.mydayid = md.mydayid
+		where md.createdby in (select id from getchilduserlist(p_userid))
+		and (md.starttime::date >= p_startdate and p_enddate >= md.starttime::date)
+		and md.statusid = 6
+		group by md.mydayid;
+		
+		--end added by pratik task id - 3710
+		
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+
+			select 
+			md.mydayid
+			,ul.displayname as username
+			,md.starttime::date as expensedate
+			,ex.totalamount as totalexpenseamount
+			,te.totalamount as totaltravelingamount
+			,ae.totalamount as totalaccommodationamount
+			,de.totalamount as totaldaamount
+			,'Expense' as type
+			,0 as incidentalexpenseid
+			,0 as totalamount
+			,0 as tolltaxamount
+			,0 as adminamount
+			,0 as miscellaneousamount
+			,0 as foodamount
+			,0 as farmermeetingamount
+			,0 as reviewmeetingamount
+			,0 as campaignamount
+			,ex.createdby  as userid                     --added by freya
+			,case when(current_date<=getdeadline(md.starttime::date) or coalesce(md.isallowadminclaimapproval,false)  or EXISTS(select 1 from tblmydaystatushistory where mydayid = md.mydayid and statusid = 9)) then true else false end as isclaimvalidate     --added by freya 27/01/2021  --changed by freya 12/02/2021
+			,tphoto.openingpicture --added by pratik taskid - 3710
+			,tphoto.closingpicture --added by pratik taskid - 3710
+			from tblmyday as md
+			inner join tblexpense as ex on md.mydayid = ex.mydayid
+			inner join tbluserlogin as ul on ul.userid = ex.createdby
+			left join tbltravelingexpense as te on te.expenseid = ex.expenseid
+			left join tblaccommodationexpense as ae on ae.expenseid = ex.expenseid
+			left join tbldaexpense as de on de.expenseid = ex.expenseid
+			left join tmptbltravelingodophoto as tphoto on tphoto.mydayid = md.mydayid  --added by pratik taskid - 3710
+			where md.createdby in (select id from getchilduserlist(p_userid))                --changed by freya 04/03/2021
+			--and md.createddate between p_startdate and p_enddate 
+			and (md.starttime::date >= p_startdate and p_enddate >= md.starttime::date)
+			and md.statusid = 6
+
+			union all
+			select 
+			0 as mydayid
+			,ul.displayname as username
+			--,iex.createddate::date as expensedate
+			,iex.incidentaldate::date as expensedate
+			,0 as totalexpenseamount
+			,0 as totaltravelingamount
+			,0 as totalaccommodationamount
+			,0 as totaldaamount
+			,'IncidentalExpense' as type
+			,iex.incidentalexpenseid
+			,iex.totalamount
+			,iex.tolltaxamount
+			,iex.adminamount
+			,iex.miscellaneousamount
+			,iex.foodamount
+			,iex.farmermeetingamount
+			,iex.reviewmeetingamount
+			,iex.campaignamount
+			,iex.createdby as userid                            --added by freya
+			,case when(current_date<=getdeadline(iex.incidentaldate::date) or coalesce(ad.isallowadminclaimapproval,false)) then true else false end as isclaimvalidate     --added by freya 27/01/2021 --changed by freya 12/02/2021
+			,'' as openingpicture --added by pratik taskid - 3710
+			,'' as closingpicture  --added by pratik taskid - 3710
+			from tblincidentalexpense as iex
+			inner join tbluserlogin as ul on ul.userid = iex.createdby
+			left join tbladminincidentialclaimallow as ad on ad.claimdate::date = iex.incidentaldate::date            --added by freya 12/02/2021   changed by freya 03/03/2021
+			where iex.createdby in (select id from getchilduserlist(p_userid))                              --changed by freya 04/03/2021
+			--and iex.createddate between p_startdate and p_enddate 
+			and (iex.incidentaldate::date >= p_startdate and p_enddate >= iex.incidentaldate::date)
+			and iex.statusid = 6
+
+			-- select
+-- 			(SELECT array_to_json(array_agg("Expense")) FROM (
+-- 				select 
+-- 				md.mydayid
+-- 				,ul.displayname as username
+-- 				,ex.createddate::date as expensedate
+-- 				,ex.totalamount as totalexpenseamount
+-- 				,te.totalamount as totaltravelingamount
+-- 				,ae.totalamount as totalaccommodationamount
+-- 				,de.totalamount as totaldaamount
+-- 				,'Expense' as type
+-- 				,0 as incidentalexpenseid
+-- 				,0 as totalamount
+-- 				,0 as tolltaxamount
+-- 				,0 as adminamount
+-- 				,0 as miscellaneousamount
+-- 				,0 as foodamount
+-- 				,0 as farmermeetingamount
+-- 				,0 as reviewmeetingamount
+-- 				,0 as campaignamount
+-- 				from tblmyday as md
+-- 				inner join tblexpense as ex on md.mydayid = ex.mydayid
+-- 				inner join tbluserlogin as ul on ul.userid = ex.createdby
+-- 				left join tbltravelingexpense as te on te.expenseid = ex.expenseid
+-- 				left join tblaccommodationexpense as ae on ae.expenseid = ex.expenseid
+-- 				left join tbldaexpense as de on de.expenseid = ex.expenseid
+-- 				where md.createdby in (select id from getchilduserlist(p_userid))
+-- 				and md.createddate between p_startdate and p_enddate and md.statusid = 6
+-- 				order by md.createddate asc
+-- 			) as "Expense") as "Expense",
+-- 			(SELECT array_to_json(array_agg("IncidentalExpense")) FROM (
+-- 				select 
+-- 				0 as mydayid
+-- 				,ul.displayname as username
+-- 				,iex.createddate::date as expensedate
+-- 				,0 as totalexpenseamount
+-- 				,0 as totaltravelingamount
+-- 				,0 as totalaccommodationamount
+-- 				,0 as totaldaamount
+-- 				,'IncidentalExpense' as type
+-- 				,iex.incidentalexpenseid
+-- 				,iex.totalamount
+-- 				,iex.tolltaxamount
+-- 				,iex.adminamount
+-- 				,iex.miscellaneousamount
+-- 				,iex.foodamount
+-- 				,iex.farmermeetingamount
+-- 				,iex.reviewmeetingamount
+-- 				,iex.campaignamount
+-- 				from tblincidentalexpense as iex
+-- 				inner join tbluserlogin as ul on ul.userid = iex.createdby
+-- 				where iex.createdby in (select id from getchilduserlist(p_userid))
+-- 				and iex.createddate between p_startdate and p_enddate and iex.statusid = 6
+-- 				order by iex.createddate asc
+-- 			) as "IncidentalExpense") as "IncidentalExpense"
+
+		 ) as kk;
+		
+		RETURN v_ResultData;
+	elseif(p_mode = 3) -- For Mobile change status by rsm for expense
+	THEN
+	
+		update tblmyday set statusid = CASE WHEN(p_status = 'Approve') THEN 8 else 7 END,statuschangeddate = now(), statuschangedby = p_userid, rejectreason = CASE WHEN(p_status = 'Approve') THEN rejectreason ELSE p_rejectreason END where mydayid = p_mydayid;
+
+		insert into tblmydaystatushistory(mydayid, statusid, statuschangedby, statuschangedate, comment)
+		values(p_mydayid, (CASE WHEN(p_status = 'Approve') THEN 8 else 7 END), p_userid, now(), CASE WHEN(p_status = 'Approve') THEN null ELSE p_rejectreason END);
+		
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+		select mydayid as id from tblmyday where mydayid = p_mydayid
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 4) -- For Mobile change status by rsm for incidental expense
+	THEN
+		update tblincidentalexpense set statusid = CASE WHEN(p_status = 'Approve') THEN 8 else 7 END,statuschangedate = now(), statuschangeby = p_userid, rejectreason = CASE WHEN(p_status = 'Approve') THEN rejectreason ELSE p_rejectreason END where incidentalexpenseid = p_incidentalexpenseid;
+
+		insert into tblincidentalstatushistory(incidentalexpenseid, statusid, statuschangedby, statuschangedate, comment)
+		values(p_incidentalexpenseid, (CASE WHEN(p_status = 'Approve') THEN 8 else 7 END), p_userid, now(), CASE WHEN(p_status = 'Approve') THEN null ELSE p_rejectreason END);
+		
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+		select incidentalexpenseid as id from tblincidentalexpense where incidentalexpenseid = p_incidentalexpenseid
+		) as kk;
+		RETURN v_ResultData;
+		--select usp_claimapprovalcrud(p_mode:=5)
+	elseif(p_mode = 5) -- For Web get HO approver list
+	THEN
+		v_Result := 'select 
+			count(1) OVER () AS counts, 
+			* 
+			from (
+			select
+-- 			ROW_NUMBER() OVER(                                                           --added by freya 10/03/2021
+-- 			PARTITION BY md.mydayid
+-- 			ORDER BY msh.statuschangedate desc
+-- 			),
+			md.mydayid as id
+			,ul.employeecode
+			,ul.displayname
+			,to_char(ex.createddate,''dd/MM/yyyy'') as createddate
+			,''DA/TA/Acco'' as type 
+			,cs.status
+			,vwzs.zonelist as zone
+			,vwzs.subregionlist
+			--,grsma.approvername
+			,grsma.displayname as approvername
+			,statuschangeby.displayname as statuschangeby
+			,to_char(md.statuschangeddate,''dd/MM/yyyy HH:mm:ss.SS'') as statuschangeddate
+			,ex.totalamount
+			,cs.claimstatusid
+			,hq.headquarter
+			,ul.designation
+			,md.expenseno
+			,to_char(md.starttime,''dd/MM/yyyy'') as expensedate
+			,CASE WHEN(md.statusid = 10 or md.statusid = 11 or md.statusid = 13 or md.statusid = 14) THEN COALESCE(ex.approvedamount,ex.totalamount) ELSE 0 END as approvedamount
+			,CASE WHEN(md.statusid = 10 or md.statusid = 11 or md.statusid = 13 or md.statusid = 14) THEN (COALESCE(ex.totalamount,0) - COALESCE(ex.approvedamount,ex.totalamount)) ELSE 0 END as deductionamount
+			--,to_char(msh.statuschangedate,''dd/MM/yyyy '') as rsmapprovedate                 --added by freya 07/01/2021
+			 
+			from tblmyday as md
+			inner join tblclaimstatus as cs on cs.claimstatusid = md.statusid
+			inner join tbluserlogin as ul on ul.userid = md.createdby
+			left join vwzonesubregionsalesdistrict as vwzs on vwzs.userid = ul.userid
+			left join tblheadquarter as hq on hq.headquarterid = ul.headquarterid
+			left join tbluserlogin as statuschangeby on statuschangeby.userid = md.statuschangedby
+			--left join getrsmapproveruser(ul.userid) as grsma on 1 = 1
+			left join tbluserlogin as grsma on grsma.userid = ul.rsmapproveruserid
+			left join tblexpense as ex on ex.mydayid = md.mydayid
+			--left join tblmydaystatushistory as msh on msh.mydayid=md.mydayid and msh.statusid=8   --added by freya 07/01/2021
+			where md.createdby in (select id from getchildalluserlist('||p_userid||'))            --changed by freya 19/03/2021
+			and md.starttime::date between '''|| p_startdate||'''::date and '''||p_enddate||'''::date
+			and CASE WHEN('''||p_status||''' = ''PendingforApproval'') THEN  claimstatusid = 6
+					WHEN('''||p_status||''' = ''PendingatHO'') THEN  claimstatusid = 8
+					WHEN('''||p_status||''' = ''InQuery'') THEN  claimstatusid = 9
+					WHEN('''||p_status||''' = ''ApproveByHO'') THEN  claimstatusid in (10, 11,15) -- added by purvesh on 07/02/21
+					WHEN('''||p_status||''' = ''PaymentReleased'') THEN  claimstatusid in (13, 14)
+					WHEN('''||p_status||''' = ''TotalClaims'') THEN  claimstatusid not in (12)
+					ELSE   1=1 END
+			union
+			select
+			
+			-- ROW_NUMBER() OVER(                                                                             --added by freya 10/03/2021
+-- 			PARTITION BY ie.incidentalexpenseid
+-- 			ORDER BY ish.statuschangedate desc
+-- 			),
+			ie.incidentalexpenseid as id
+			,ul.employeecode
+			,ul.displayname
+			,to_char(ie.createddate,''dd/MM/yyyy'') as createddate
+			,''Incidental'' as type
+			,cs.status
+			,vwzs.zonelist as zone
+			,vwzs.subregionlist
+			--,grsma.approvername
+			,grsma.displayname as approvername
+			,statuschangeby.displayname as statuschangeby
+			,to_char(ie.statuschangedate,''dd/MM/yyyy HH:mm:ss.SS'') as statuschangedate
+			,ie.totalamount
+			,cs.claimstatusid
+			,hq.headquarter
+			,ul.designation
+			,ie.expenseno
+			,to_char(ie.incidentaldate,''dd/MM/yyyy'') as expensedate
+			,CASE WHEN(ie.statusid = 10 or ie.statusid = 11 or ie.statusid = 13 or ie.statusid = 14) THEN COALESCE(ie.approvamount,ie.totalamount) ELSE 0 END as approvedamount
+			,CASE WHEN(ie.statusid = 10 or ie.statusid = 11 or ie.statusid = 13 or ie.statusid = 14) THEN (COALESCE(ie.totalamount,0) - COALESCE(ie.approvamount,ie.totalamount)) ELSE 0 END as deductionamount
+			--,to_char(ish.statuschangedate,''dd/MM/yyyy'') as rsmapprovedate                 --added by freya 07/01/2021
+			from tblincidentalexpense as ie
+			inner join tblclaimstatus as cs on cs.claimstatusid = ie.statusid
+			inner join tbluserlogin as ul on ul.userid = ie.createdby
+			left join vwzonesubregionsalesdistrict as vwzs on vwzs.userid = ul.userid
+			left join tblheadquarter as hq on hq.headquarterid = ul.headquarterid
+			left join tbluserlogin as statuschangeby on statuschangeby.userid = ie.statuschangeby
+			left join tbluserlogin as grsma on grsma.userid = ul.rsmapproveruserid
+			--left join tblincidentalstatushistory as ish on ish.incidentalexpenseid= ie.incidentalexpenseid and ish.statusid=8   --added by freya 07/01/2021
+			where ie.createdby in (select id from getchildalluserlist('||p_userid||'))                                   --changed by freya 18/03/2021
+			and ie.incidentaldate::date between '''|| p_startdate||'''::date and '''||p_enddate||'''::date
+			and CASE WHEN('''||p_status||''' = ''PendingforApproval'') THEN  claimstatusid = 6
+					WHEN('''||p_status||''' = ''PendingatHO'') THEN  claimstatusid = 8
+					WHEN('''||p_status||''' = ''InQuery'') THEN  claimstatusid = 9
+					WHEN('''||p_status||''' = ''ApproveByHO'') THEN  claimstatusid in (10, 11 ,15) -- added by purvesh on 07/02/21
+					WHEN('''||p_status||''' = ''PaymentReleased'') THEN  claimstatusid in (13, 14)
+					WHEN('''||p_status||''' = ''TotalClaims'') THEN  claimstatusid not in (12)
+					ELSE  1=1 END
+		) as t where 1=1--t.row_number = 1	             --added by freya 10/03/2021
+		and 1=1 --and expensedate::date between '''|| p_startdate||'''::date and '''||p_enddate||'''::date  
+		and ' || p_OtherFilter;
+		-- IF (p_status = 'PendingforApproval')
+-- 		THEN
+-- 			v_Result := v_Result || ' and claimstatusid = 6';
+-- 		ELSEIF (p_status = 'PendingatHO')
+-- 		THEN
+-- 			v_Result := v_Result || ' and claimstatusid = 8';
+-- 		ELSEIF (p_status = 'InQuery')
+-- 		THEN
+-- 			v_Result := v_Result || ' and claimstatusid = 9';
+-- 		ELSEIF (p_status = 'ApproveByHO')
+-- 		THEN
+-- 			v_Result := v_Result || ' and claimstatusid in (10, 11, 15)';
+-- 		END IF;
+		v_Result := v_Result || ' ORDER BY ' || p_orderby
+					||' OFFSET ' || Cast(p_skip as varchar(10)) 
+					||' ROWS FETCH NEXT ' || Cast(p_pagecount as varchar(10)) ||' ROWS ONLY ';
+
+		
+		v_Result:= 'SELECT array_to_json(array_agg(kk)) FROM (' || v_Result || ') as kk';		
+		EXECUTE format('%s ',v_Result) INTO v_ResultData;	
+		RETURN v_ResultData;
+	elseif(p_mode = 6) -- For Web get approval count
+	THEN
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+		-- select 
+-- 			--count(1) OVER () AS counts, 
+-- 			sum(1) over() as "TotalClaims"
+-- 			,sum(CASE WHEN(claimstatusid = 6) THEN 1 ELSE 0 END) over() as "PendingForApprover"
+-- 			,sum(CASE WHEN(claimstatusid = 8) THEN 1 ELSE 0 END) over() as "PendingAtHO"
+-- 			,sum(CASE WHEN(claimstatusid = 9) THEN 1 ELSE 0 END) over() as "InQuery"
+-- 			,sum(CASE WHEN(claimstatusid = 10 or claimstatusid = 11) THEN 1 ELSE 0 END) over() as "ApproveByHO"
+-- 			from (
+-- 			select
+-- 			md.mydayid as id
+-- 			--,ul.employeecode
+-- 			--,ul.displayname
+-- 			,to_char(md.createddate,'dd/MM/yyyy') as createddate
+-- 			,'DA/TA/Acco' as type 
+-- 			,cs.status
+-- 			--,vwzs.zonelist as zone
+-- 			--,grsma.approvername
+-- 			--,statuschangeby.displayname as statuschangeby
+-- 			,to_char(md.statuschangeddate,'dd/MM/yyyy HH:mm:ss.SS') as statuschangeddate
+-- 			--,ex.totalamount
+-- 			,cs.claimstatusid
+-- 			from tblmyday as md
+-- 			inner join tbluserlogin as ul on ul.userid = md.createdby
+-- 			inner join tblclaimstatus as cs on cs.claimstatusid = md.statusid
+-- 			--inner join vwzonesubregionsalesdistrict as vwzs on vwzs.userid = ul.userid
+-- 			--left join tbluserlogin as statuschangeby on statuschangeby.userid = md.statuschangedby
+-- 			--left join getrsmapproveruser(ul.userid) as grsma on 1 = 1
+-- 			--left join tblexpense as ex on ex.mydayid = md.mydayid
+-- 			where md.createdby in (select id from getchilduserlist(p_userid))
+-- 			union
+-- 			select 
+-- 			ie.incidentalexpenseid as id
+-- 			--,ul.employeecode
+-- 			--,ul.displayname
+-- 			,to_char(ie.incidentaldate,'dd/MM/yyyy') as createddate
+-- 			,'Incidental' as type
+-- 			,cs.status
+-- 			--,vwzs.zonelist as zone
+-- 			--,grsma.approvername
+-- 			--,statuschangeby.displayname as statuschangeby
+-- 			,to_char(ie.statuschangedate,'dd/MM/yyyy HH:mm:ss.SS') as statuschangedate
+-- 			--,ie.totalamount
+-- 			,cs.claimstatusid
+-- 			from tblincidentalexpense as ie
+-- 			inner join tbluserlogin as ul on ul.userid = ie.createdby
+-- 			inner join tblclaimstatus as cs on cs.claimstatusid = ie.statusid
+-- 			where ie.createdby in (select id from getchilduserlist(p_userid))
+-- 			--inner join vwzonesubregionsalesdistrict as vwzs on vwzs.userid = ul.userid
+-- 			--left join tbluserlogin as statuschangeby on statuschangeby.userid = ie.statuschangeby
+-- 			--left join getrsmapproveruser(ul.userid) as grsma on 1 = 1
+-- 		) as t
+-- 		where 1=1 and createddate::date between p_startdate and p_enddate 
+			select 
+				sum(1) over() as "TotalClaims"
+				,sum(CASE WHEN(statusid = 6) THEN 1 ELSE 0 END) over() as "PendingForApprover"
+				,sum(CASE WHEN(statusid = 8) THEN 1 ELSE 0 END) over() as "PendingAtHO"
+				,sum(CASE WHEN(statusid = 9) THEN 1 ELSE 0 END) over() as "InQuery"
+				,sum(CASE WHEN(statusid = 10 or statusid = 11 or statusid = 15) THEN 1 ELSE 0 END) over() as "ApproveByHO"
+				,sum(CASE WHEN(statusid = 13 or statusid = 14) THEN 1 ELSE 0 END) over() as "PaymentReleased"
+				from (
+				select
+				md.mydayid as id
+				,'DA/TA/Acco' as type 
+				,md.statusid
+				from tblmyday as md
+				where md.createdby in (select id from getchildalluserlist(p_userid)) and md.createddate::date between p_startdate and p_enddate 
+				and md.statusid not in (12)
+				union
+				select 
+				ie.incidentalexpenseid as id
+				,'Incidental' as type
+				,ie.statusid
+				from tblincidentalexpense as ie
+				where ie.createdby in (select id from getchildalluserlist(p_userid)) and ie.incidentaldate::date between p_startdate and p_enddate 
+				and ie.statusid not in (12)
+			) as t
+			where 1=1 
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 7) -- For web change status by ho for expense
+	THEN
+	
+		update tblmyday set statusid = CASE WHEN(p_status = 'Approve') THEN 11 WHEN(p_status = 'Deduction') THEN 10  else 9 END,statuschangeddate = now(), statuschangedby = p_userid, rejectreason = CASE WHEN(p_status = 'Approve') THEN rejectreason ELSE p_rejectreason END where mydayid = p_mydayid;
+
+		
+		insert into tblmydaystatushistory(mydayid, statusid, statuschangedby, statuschangedate, comment)
+		values(p_mydayid, (CASE WHEN(p_status = 'Approve') THEN 11 WHEN(p_status = 'Deduction') THEN 10  else 9 END), p_userid, now(), CASE WHEN(p_status = 'Approve') THEN null ELSE p_rejectreason END);
+
+		if(p_status = 'Deduction' or p_status = 'Approve')
+		THEN
+			
+			update tblexpense set 
+			approvedamount = td.approvedamount
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				approvedamount numeric(10,2)
+				)
+				where tblexpense.expenseid = td.expenseid;
+
+			update tbltravelingexpense set 
+			approvedamount = td.approvedtravelingamount
+			,comment=td.travelingcomment
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				approvedtravelingamount numeric(10,2),
+				travelingcomment character varying(500)
+				)
+				where tbltravelingexpense.expenseid = td.expenseid;
+
+			update tblaccommodationexpense set 
+			approvedamount = td.approvedaccommodationamount
+			,comment=td.accommodationcomment
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				approvedaccommodationamount numeric(10,2),
+				accommodationcomment character varying(500)
+				)
+				where tblaccommodationexpense.expenseid = td.expenseid;
+
+			update tbldaexpense set 
+			approvedamount = td.approveddaamount
+			,comment=td.dacomment
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				approveddaamount numeric(10,2),
+				dacomment character varying(500)
+				)
+				where tbldaexpense.expenseid = td.expenseid;
+		END IF;
+
+		if(p_status = 'Inquery')
+		THEN
+			update tblexpense set 
+			approvedamount = null
+			from  json_to_record(p_json) as td(
+				expenseid integer
+				)
+				where tblexpense.expenseid = td.expenseid;
+		
+			update tbltravelingexpense set 
+			comment=td.travelingcomment,
+			approvedamount=null
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				travelingcomment character varying(500)
+				)
+				where tbltravelingexpense.expenseid = td.expenseid;
+
+			update tblaccommodationexpense set 
+			comment=td.accommodationcomment,
+			approvedamount=null
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				accommodationcomment character varying(500)
+				)
+				where tblaccommodationexpense.expenseid = td.expenseid;
+
+			update tbldaexpense set 
+			comment=td.dacomment,
+			approvedamount=null
+			from  json_to_record(p_json) as td(
+				expenseid integer,
+				dacomment character varying(500)
+				)
+				where tbldaexpense.expenseid = td.expenseid;
+		END IF;
+		
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+		select mydayid as id from tblmyday where mydayid = p_mydayid
+		) as kk;
+		RETURN v_ResultData;
+	elseif(p_mode = 8) -- For web change status by ho for incidental expense
+	THEN
+		update tblincidentalexpense set statusid = CASE WHEN(p_status = 'Approve') THEN 11 WHEN(p_status = 'Deduction') THEN 10 else 9 END,statuschangedate = now(), statuschangeby = p_userid, rejectreason = p_rejectreason where incidentalexpenseid = p_incidentalexpenseid;
+
+		insert into tblincidentalstatushistory(incidentalexpenseid, statusid, statuschangedby, statuschangedate, comment)
+		values(p_incidentalexpenseid, (CASE WHEN(p_status = 'Approve') THEN 11 WHEN(p_status = 'Deduction') THEN 10  else 9 END), p_userid, now(), CASE WHEN(p_status = 'Approve') THEN null ELSE p_rejectreason END);
+
+		
+		
+		if(p_status = 'Deduction' or p_status = 'Approve')
+		THEN
+			update tblincidentalexpense set 
+			approvamount = td.approvamount,
+			approvtolltaxamount = td.approvtolltaxamount,
+			approvadminamount = td.approvadminamount,
+			approvmiscellaneousamount = td.approvmiscellaneousamount,
+			approvfoodamount = td.approvfoodamount,
+			approvfarmermeetingamount = td.approvfarmermeetingamount,
+			approvreviewmeetingamount = td.approvreviewmeetingamount,
+			approvcampaignamount = td.approvcampaignamount,
+			tolltaxcomment = td.tolltaxcomment,
+			admincomment = td.admincomment,
+			miscellaneouscomment = td.miscellaneouscomment,
+			foodcomment = td.foodcomment,
+			farmermeetingcomment = td.farmermeetingcomment,
+			reviewmeetingcomment = td.reviewmeetingcomment,
+			campaigncomment = td.campaigncomment
+			from  json_to_record(p_json) as td(
+				incidentalexpenseid integer,
+				approvamount numeric(10,2),
+				approvtolltaxamount numeric(10,2),
+				approvadminamount numeric(10,2),
+				approvmiscellaneousamount numeric(10,2),
+				approvfoodamount numeric(10,2),
+				approvfarmermeetingamount numeric(10,2),
+				approvreviewmeetingamount numeric(10,2),
+				approvcampaignamount numeric(10,2),
+				tolltaxcomment character varying(500),
+				admincomment character varying(500),
+				miscellaneouscomment character varying(500),
+				foodcomment character varying(500),
+				farmermeetingcomment character varying(500),
+				reviewmeetingcomment character varying(500),
+				campaigncomment character varying(500)
+				)
+				where tblincidentalexpense.incidentalexpenseid = td.incidentalexpenseid;
+		END IF;
+
+		if(p_status = 'Inquery')
+		THEN
+			update tblincidentalexpense set 
+			tolltaxcomment = td.tolltaxcomment,
+			admincomment = td.admincomment,
+			miscellaneouscomment = td.miscellaneouscomment,
+			foodcomment = td.foodcomment,
+			farmermeetingcomment = td.farmermeetingcomment,
+			reviewmeetingcomment = td.reviewmeetingcomment,
+			campaigncomment = td.campaigncomment,
+			approvamount = null,
+			approvtolltaxamount = null,
+			approvadminamount = null,
+			approvmiscellaneousamount =null,
+			approvfoodamount = null,
+			approvfarmermeetingamount =null,
+			approvreviewmeetingamount = null,
+			approvcampaignamount = null
+			from  json_to_record(p_json) as td(
+				incidentalexpenseid integer,
+				tolltaxcomment character varying(500),
+				admincomment character varying(500),
+				miscellaneouscomment character varying(500),
+				foodcomment character varying(500),
+				farmermeetingcomment character varying(500),
+				reviewmeetingcomment character varying(500),
+				campaigncomment character varying(500)
+				)
+				where tblincidentalexpense.incidentalexpenseid = td.incidentalexpenseid;
+		END IF;
+
+		SELECT array_to_json(array_agg(kk)) INTO v_ResultData FROM (
+		select incidentalexpenseid as id from tblincidentalexpense where incidentalexpenseid = p_incidentalexpenseid
+		) as kk;
+		RETURN v_ResultData;
+	END IF;
+END;
+$BODY$;
+
+ALTER FUNCTION public.usp_claimapprovalcrud(integer, integer, date, date, integer, integer, character varying, integer, integer, text, character varying, character varying, json)
+    OWNER TO postgres;
