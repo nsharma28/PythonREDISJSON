@@ -1,0 +1,448 @@
+elseif(p_mode = 8) THEN 
+	
+	if( p_fromdate + interval '2 month' < p_todate ) then p_todate := p_fromdate + interval '2 month' - interval '1 day';
+
+	end if;
+
+	select string_agg(id::character varying,',') into _userids from getchildalluserlist(p_userid); v_Result := 'WITH zoneid_to_list AS (
+             SELECT string_agg(zn.zone::text, '', ''::text) AS zonelist, uzst.userid 
+             FROM tbluserzonesubregionterritory uzst
+             JOIN tblzone zn ON zn.id IN (SELECT UNNEST(string_to_array(uzst.zoneidlist, '',''))::int)
+             GROUP BY uzst.userid
+          ),
+          subregionid_to_list AS (
+              SELECT string_agg(sr.name::text, '', ''::text) AS subregionlist, uzst.userid 
+              FROM tbluserzonesubregionterritory uzst
+              JOIN tblsubregion sr ON sr.id IN (SELECT UNNEST(string_to_array(uzst.subregionidlist, '',''))::int)
+              GROUP BY uzst.userid
+          ),
+          territory_to_list AS (
+              SELECT string_agg(sdm.name::text, '', ''::text) AS salesdistrictlist, uzst.userid 
+              FROM tbluserzonesubregionterritory uzst
+              JOIN tblsalesdistrictmaster sdm ON sdm.id IN (SELECT UNNEST(string_to_array(uzst.salesdistrictidlist, '',''))::int)
+              GROUP BY uzst.userid
+          )select
+    count(1) OVER () AS counts,
+    *
+    from (select
+    row_number() over() as no
+    ,t.mydayid
+    ,ul.employeecode as employeecode
+    ,ul.displayname as employeename
+    ,ul.designation as designation
+    ,hq.headquarter as headquarter
+    ,ttl.salesdistrictlist as territory
+    ,stl.subregionlist as subregion
+    ,ztl.zonelist as zone
+    ,approver.displayname as approvername
+    ,ul.username as contactno
+    ,ul.email as email
+    ,t.date,
+    t.daystarttime,
+    t.dayclosedate,
+    t.dayclosetime,
+    t.workinghours,
+    ROW_NUMBER() OVER( PARTITION BY ul.employeecode,ul.displayname,ul.designation,hq.headquarter,ttl.salesdistrictlist,stl.subregionlist,approver.displayname,ul.username,ul.email,t.date ORDER BY t.date::date asc,t.checkintime asc) as sequence          --changed by freya 05/05/2021
+    ,t.visittype,
+    t.name,
+    t.customercode,
+    t.checkintime,
+    t.checkouttime,
+    t.differencetime,
+    t.village,
+    t.postcode,
+    t.product,
+    t.nooffarmer,
+    t.reviewmeeting,
+    t.visitreason,
+    t.attitude
+    ,t.productknowledge
+    ,t.priceexplanation
+    ,t.marketingsupport
+    ,t.remark
+    from (
+    select  md.createdby as userid
+    ,cv.mydayid  as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when(to_char(cv.checkintime,''HH12:MI:SS AM'')!= '''') then ''customer'' else '''' end as visittype
+    ,cm.customername as name
+    ,cm.customercode as customercode
+    ,to_char(cv.checkintime,''HH24:MI:SS'') as checkintime                    --changed by freya 05/05/2021
+    ,to_char(cv.checkouttime,''HH24:MI:SS'') as checkouttime  --changed by freya 05/05/2021
+    ,case when (cv.checkouttime - cv.checkintime < INTERVAL ''0'') then (-(cv.checkouttime - cv.checkintime))::character varying else (cv.checkouttime - cv.checkintime)::character varying end as differencetime
+    ,cd.city1 as village
+    ,cd.postalcode as postcode
+    --,MI.materialdescription as product             --coMIented by freya 06/05/2021
+    ,string_agg(b.description,'','') as product      --added by freya 06/05/2021
+    ,''''as nooffarmer
+    ,'''' as reviewmeeting
+    ,concat_ws('','',case when(cv.ordermasterid is not null and cv.ordermasterid != 0) then ''SA'' end,case when(cv.orderplaningdate is not null) then ''SB'' end,case when(cv.salesreasoncomment is not null) then ''SC'' end,case when(cv.collectiondate is not null)then ''CA'' end,case when(cv.collectionplandate is not null)then ''CB'' end,case when (cv.collectionreasoncomment is not null) then ''CC'' end,case when(cl.customervisitplanid is not null) then ''L'' end) as visitreason
+    --,'''' as visitreason
+    ,cvf.attitude::text|| '' Star'' as attitude
+    ,cvf.productknowledge::text|| '' Star'' as productknowledge
+    ,cvf.priceexplanation::text|| '' Star'' as priceexplanation
+    ,cvf.marketingsupport::text|| '' Star'' as marketingsupport
+    ,cvf.remark
+
+    from  tblmyday as md
+    inner join tblcustomervisit as cv on cv.mydayid=md.mydayid
+    left join tblcustomervisitplan as cvp on cv.customervisitplanid = cvp.customervisitplanid and cvp.visiterid = md.createdby
+    left join tblcustomermaster as cm on cm.id = cvp.customerid
+    left join tblcustomerdetail as cd on cd.customercode=cm.customercode
+    left join tblorderdetail as od on od.ordermasterid=cv.ordermasterid
+    left join tblmaterialmaster as mm on mm.id=od.materialmasterid
+    left join tblcustomerliquidation as cl on cl.customervisitplanid = cvp.customervisitplanid
+    left join tblbrand as b on b.id = cl.brandid                                                 --added by freya 06/05/2021
+    left join tblcustomervisitfeedback as cvf on cvf.customervisitid = cv.customervisitid
+    where md.createddate::date between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+    group by md.createdby,cv.mydayid,md.createddate,md.starttime,md.endtime,cv.checkintime,cm.customername,cm.customercode,cv.checkintime,cv.checkouttime,cd.city1,cd.postalcode,cv.ordermasterid,cv.orderplaningdate,cv.salesreasoncomment,cv.collectiondate,cv.collectionplandate,cv.collectionreasoncomment,cl.customervisitplanid      --added by freya 06/05/2021
+    ,cvf.attitude
+    ,cvf.productknowledge
+    ,cvf.priceexplanation
+    ,cvf.marketingsupport
+    ,cvf.remark
+	
+	
+    union all
+	
+	
+	
+    select  md.createdby as userid
+    ,rv.mydayid  as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when(to_char(rv.checkintime,''HH12:MI:SS AM'')!= '''') then ''retailer'' else '''' end as visittype
+    ,r.name as name
+    ,r.mobileno as customercode                                     --changed by freya 05/05/2021
+    ,to_char(rv.checkintime,''HH24:MI:SS'') as checkintime        --changed by freya 05/05/2021
+    ,to_char(rv.checkouttime,''HH24:MI:SS'') as checkouttime      --changed by freya 05/05/2021
+    ,case when(rv.checkouttime - rv.checkintime < INTERVAL ''0'') then (-(rv.checkouttime - rv.checkintime))::character varying else(rv.checkouttime - rv.checkintime)::character varying end as differencetime
+    ,r.city as village
+    ,r.postcode as postcode
+    --,mm.materialdescription as product                       --commented by freya 06/05/2021
+    ,string_agg(b.description,'','') as product                   --added by freya 06/05/2021
+    ,''''as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tblretailervisit as rv on rv.mydayid=md.mydayid
+    left join tblretailervisitplan as rvp on rv.retailervisitplanid = rvp.retailervisitplanid and rvp.visiterid = md.createdby
+    left join tblretailer as r on r.retailerid=rvp.retailerid
+    left join tblretailerliquidation as rl on rl.retailervisitplanid=rvp.retailervisitplanid
+    left join tblbrand as b on b.id = rl.brandid
+    left join tblmaterialmaster as mm on mm.materialgroup2 = b.materialgroup2
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+    group by md.createdby,rv.mydayid,md.createddate,md.starttime,md.endtime,rv.checkintime,r.name,r.mobileno,rv.checkouttime,r.city,r.postcode       --added by freya 06/05/2021
+	
+	
+    union all
+
+    select distinct md.createdby as userid
+    ,fv.mydayid  as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when(to_char(fv.checkintime,''HH12:MI:SS AM'') != '''') then ''OFM'' else '''' end as visittype
+    ,'''' as name
+    ,'''' as customercode
+    ,to_char(fv.checkintime,''HH24:MI:SS'') as checkintime                    --changed by freya 05/05/2021
+    ,to_char(fv.checkouttime,''HH24:MI:SS'') as checkouttime                  --changed by freya 05/05/2021
+    ,case when (fv.checkouttime - fv.checkintime < INTERVAL ''0'') then (-(fv.checkouttime - fv.checkintime))::character varying else(fv.checkouttime - fv.checkintime)::character varying end as differencetime
+    ,fv.city as village
+    ,fv.postcode as postcode
+    ,'''' as product
+    ,fv.nooffarmer:: character varying as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tbluserlogin as approver on approver.userid = md.createdby
+    inner join tblfarmermeetingvisit as fv on fv.mydayid = md.mydayid
+    left join tblfarmermeetingvisiter as fmv on fmv.farmermeetingvisiterid=fv.farmermeetingvisiterid and fmv.visiterid = md.createdby
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+	
+	
+    union all
+
+    select distinct md.createdby as userid
+    ,fv.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when(to_char(fv.checkintime,''HH12:MI:SS AM'')!= '''') then ''IFM'' else '''' end as visittype
+    ,f.name as name
+    ,f.mobileno as customercode                                 --changed by freya 05/05/2021
+    ,to_char(fv.checkintime,''HH24:MI:SS'') as checkintime      --changed by freya 05/05/2021
+    ,to_char(fv.checkouttime,''HH24:MI:SS'') as checkouttime    --changed by freya 05/05/2021
+    ,case when (fv.checkouttime - fv.checkintime < INTERVAL ''0'') then (-(fv.checkouttime - fv.checkintime))::character varying else(fv.checkouttime - fv.checkintime):: character varying end as differencetime
+    ,f.city as city
+    ,f.postcode as postcode
+    ,string_agg(fp.key,'','') as product                       --changed by freya 06/05/2021
+    ,'''' as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tblfarmervisit as fv on fv.mydayid = md.mydayid
+    inner join tblfarmervisitplan as fvp on fv.farmervisitplanid = fvp.farmervisitplanid and fvp.visiterid = md.createdby
+    inner join tblfarmer as f on f.farmerid = fvp.farmerid
+    left join tblfarmerplant as fp on fp.farmervisitplanid = fvp.farmervisitplanid
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+    group by md.createdby,fv.mydayid,md.createddate,md.starttime,md.endtime,fv.checkintime,f.name,f.mobileno,fv.checkintime,fv.checkouttime,f.city,f.postcode          --added by freya 06/05/2021
+	
+	
+    union all
+	
+	
+    select distinct md.createdby as userid
+    ,rm.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when(to_char(rm.checkintime,''HH12:MI:SS AM'') != '''') then ''review meeting'' else '''' end as visittype
+    ,'''' as name
+    ,'''' as customercode
+    ,to_char(rm.checkintime,''HH24:MI:SS'') as checkintime                 --changed by freya 05/05/2021
+    ,to_char(rm.checkouttime,''HH24:MI:SS'') as checkouttime               --changed by freya 05/05/2021
+    ,case when(rm.checkouttime - rm.checkintime < INTERVAL ''0'') then (-(rm.checkouttime - rm.checkintime))::character varying else(rm.checkouttime - rm.checkintime)::character varying end as differencetime
+    ,rmvp.location as village
+    ,'''' as postcode
+    ,'''' as product
+    ,'''' as nooffarmer
+    ,rmvp.rmno as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tbllreviewmeetingvisit as rm on rm.mydayid = md.mydayid
+    left join tblreviewmeetingvisiter as rmv on rmv.reviewmeetingvisiterid=rm.reviewmeetingvisiterid and rmv.visiterid = md.createdby
+    left join tblreviewmeetingvisitplan as rmvp on rmvp.reviewmeetingvisitplanid = rmv.reviewmeetingvisitplanid
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+	
+	
+    union all
+	
+	
+    select distinct md.createdby as userid
+    ,ov.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when (to_char(ov.checkintime,''HH12:MI:SS AM'') != '''') then ''other'' else '''' end as visittype
+    ,lv.lookupvalue as name
+    ,'''' as customercode
+    ,to_char(ov.checkintime,''HH24:MI:SS'') as checkintime                     --changed by freya 05/05/2021
+    ,to_char(ov.checkouttime,''HH24:MI:SS'') as checkouttime                   --changed by freya 05/05/2021
+    ,case when (ov.checkouttime - ov.checkintime < INTERVAL ''0'') then (-(ov.checkouttime - ov.checkintime))::character varying else (ov.checkouttime - ov.checkintime)::character varying end as differencetime
+    ,'''' as village
+    ,'''' as postcode
+    ,'''' as product
+    ,'''' as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tbllothervisit as ov on ov.mydayid = md.mydayid
+    inner join tblothervisitplan as ovp on ovp.othervisitplanid = ov.othervisitplanid and ovp.visiterid = md.createdby
+    left join tbllookupvalues as lv on lv.lookupvalueid = ovp.visittypeid
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+	
+	
+    union all
+	
+	
+    select distinct md.createdby as userid
+    ,dm.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when (to_char(dm.checkintime,''HH12:MI:SS AM'') != '''') then ''demo'' else '''' end as visittype
+    ,f.name as name
+    ,'''' as customercode
+    ,to_char(dm.checkintime,''HH24:MI:SS'') as checkintime                     --changed by freya 05/05/2021
+    ,to_char(dm.checkouttime,''HH24:MI:SS'') as checkouttime                   --changed by freya 05/05/2021
+    ,case when (dm.checkouttime - dm.checkintime < INTERVAL ''0'') then (-(dm.checkouttime - dm.checkintime))::character varying else(dm.checkouttime - dm.checkintime)::character varying end as differencetime
+    ,'''' as village
+    ,'''' as postcode
+    ,'''' as product
+    ,'''' as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tbldemovisit as dm on dm.mydayid = md.mydayid
+    inner join tbldemovisiter as dv on dv.demovisiterid=dm.demovisiterid and dv.inviteeid = md.createdby
+    inner join tbldemovisitplan as dvp on dvp.demovisitplanid = dv.demovisitplanid
+    inner join tblfarmer as f on f.mobileno = dvp.mobilenumber
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+	
+    union all
+	
+	
+    select distinct md.createdby as userid
+    ,fv.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when (to_char(fv.checkintime,''HH12:MI:SS AM'') != '''') then ''field day'' else '''' end as visittype
+    ,f.name as name
+    ,'''' as customercode
+    ,to_char(fv.checkintime,''HH24:MI:SS'') as checkintime            --changed by freya 05/05/2021
+    ,to_char(fv.checkouttime,''HH24:MI:SS'') as checkouttime          --changed by freya 05/05/2021
+    ,case when(fv.checkouttime - fv.checkintime < INTERVAL ''0'') then (-(fv.checkouttime - fv.checkintime))::character varying else(fv.checkouttime - fv.checkintime)::character varying end as differencetime
+    ,'''' as village
+    ,'''' as postcode
+    ,'''' as product
+    ,fvp.nooffarmer:: character varying as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tbluserlogin as ul on md.createdby = ul.userid
+    inner join tblfielddayvisit as fv on fv.mydayid = md.mydayid
+    inner join tbldemovisiter as dv on dv.demovisiterid=fv.demovisiterid and dv.inviteeid = md.createdby
+    inner join tblfielddayvisitplan as fvp on dv.demovisitplanid = fvp.demovisitplanid
+    inner join tbldemovisitplan as dvp on fvp.demovisitplanid = dvp.demovisitplanid
+    inner join tblfarmer as f on f.mobileno = dvp.mobilenumber
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+	
+	
+    union all
+	
+	
+    select distinct md.createdby as userid
+    ,fv.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when (to_char(fv.checkintime,''HH12:MI:SS AM'') != '''') then ''follow up day'' else '''' end as visittype
+    ,f.name as name
+    ,'''' as customercode
+    ,to_char(fv.checkintime,''HH24:MI:SS'') as checkintime               --changed by freya 05/05/2021
+    ,to_char(fv.checkouttime,''HH24:MI:SS'') as checkouttime             --changed by freya 05/05/2021
+    ,case when(fv.checkouttime - fv.checkintime < INTERVAL ''0'') then (-(fv.checkouttime - fv.checkintime))::character varying else(fv.checkouttime - fv.checkintime)::character varying end as differencetime
+    ,'''' as village
+    ,'''' as postcode
+    ,'''' as product
+    ,'''' as nooffarmer
+    ,'''' as reviewmeeting
+    ,'''' as visitreason
+    ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tblfollowupvisit as fv on fv.mydayid = md.mydayid
+    inner join tbldemovisiter as dv on dv.demovisiterid=fv.demovisiterid and dv.inviteeid = md.createdby
+    inner join tblfollowupvisitplan as fvp on dv.demovisitplanid = fvp.demovisitplanid
+    inner join tbldemovisitplan as dvp on dvp.demovisitplanid = fvp.demovisitplanid
+    inner join tblfarmer as f on f.mobileno = dvp.mobilenumber
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+	
+	
+    union all
+	
+	
+    select
+    distinct md.createdby as userid
+    ,md.mydayid as mydayid
+    ,to_char(md.createddate,''dd/MM/yyyy'') as date
+    ,to_char(md.starttime,''HH24:MI:ss'') as daystarttime
+    ,to_char(md.endtime,''dd/MM/yyyy'') as dayclosedate
+    ,to_char(md.endtime,''HH24:MI:ss'') as dayclosetime
+    ,case when (md.starttime - md.endtime < INTERVAL ''0'') then (-(md.starttime - md.endtime))::character varying else (md.starttime - md.endtime)::character varying end as workinghours
+    ,case when(to_char(sv.checkintime,''HH12:MI:SS AM'')!= '''') then ''Stock'' else '''' end as visittype
+    ,COALESCE(cm.customername,r.name) as name
+    ,COALESCE(cm.customercode,r.mobileno) as customercode
+    ,to_char(sv.checkintime,''HH24:MI:SS'') as checkintime
+    ,to_char(sv.checkouttime,''HH24:MI:SS'') as checkouttime
+    ,case when (sv.checkouttime - sv.checkintime < INTERVAL ''0'') then (-(sv.checkouttime - sv.checkintime))::character varying else(sv.checkouttime - sv.checkintime):: character varying end as differencetime
+    ,COALESCE(cd.city1,r.city) as city
+    ,COALESCE(cd.postalcode,r.postcode) as postcode
+    ,'''' as product
+        ,'''' as nooffarmer
+        ,'''' as reviewmeeting
+        ,'''' as visitreason
+        ,'''' as attitude
+    ,'''' as productknowledge
+    ,'''' as priceexplanation
+    ,'''' as marketingsupport
+    ,'''' as remark
+    from tblmyday as md
+    inner join tblstockvisit as sv on sv.mydayid = md.mydayid
+    inner join tblstockvisitplan as svp on svp.stockvisitplanid = sv.stockvisitplanid
+    left join tblcustomermaster as cm on cm.id = svp.customerid
+    left join tblcustomerdetail as cd on cd.cid = cm.id
+    left join tblretailer as r on r.retailerid = svp.retailerid
+    where md.createddate::date  between '''||p_fromdate::date||''' and '''||p_todate::date ||'''
+    and md.createdby in ('|| _userids ||')
+    ) as t
+    inner join tbluserlogin as ul on ul.userid = t.userid
+    left join tbluserlogin as approver on approver.userid = ul.rsmapproveruserid
+    left join tblheadquarter as hq on ul.headquarterid=hq.headquarterid
+    left join zoneid_to_list AS ztl ON ztl.userid = ul.userid
+       left join subregionid_to_list AS stl ON stl.userid = ul.userid
+       left join territory_to_list AS ttl ON ttl.userid = ul.userid
+    --where ul.userid in ('|| _userids ||')                --added by freya 08/03/2021
+    ) as t
+   where --t.date::date between '''||p_fromdate||'''::date and '''||p_todate ||'''::date and
+   ' || p_OtherFilter; v_Result := v_Result || ' ORDER BY ' || p_orderby ||' OFFSET ' || Cast(p_skip as varchar(10)) ||' ROWS FETCH NEXT ' || Cast(p_pagecount as varchar(10)) ||' ROWS ONLY '; v_Result:= 'SELECT array_to_json(array_agg(kk)) FROM (' || v_Result || ') as kk'; EXECUTE format('%s ',v_Result) INTO v_ResultData; RETURN v_ResultData;
